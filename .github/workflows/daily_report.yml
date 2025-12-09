@@ -2,11 +2,7 @@ name: Daily DTC Report
 
 on:
   schedule:
-    # ตั้งเวลาทำงาน (หน่วยเป็น UTC)
-    # 8:00 โมงเช้าไทย = 1:00 AM UTC
     - cron: '0 1 * * *'
-  
-  # ปุ่มกด Manual เผื่ออยากสั่งรันเองทันทีเพื่อเทส
   workflow_dispatch:
 
 jobs:
@@ -21,14 +17,17 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: '18'
+        cache: 'npm' # ช่วยให้โหลดเร็วขึ้น
 
     - name: Install Dependencies
-      run: npm install
+      # ใช้ npm ci เพื่อความสะอาดและชัวร์กว่า npm install
+      run: |
+        npm install
+        npm list puppeteer # เช็คว่าลงจริงไหม
 
     - name: Run Script
       run: node index.js
       env:
-        # ดึงค่าจาก GitHub Secrets มาใช้
         DTC_USER: ${{ secrets.DTC_USER }}
         DTC_PASS: ${{ secrets.DTC_PASS }}
         EMAIL_USER: ${{ secrets.EMAIL_USER }}
