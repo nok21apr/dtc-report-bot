@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Fix Timeout & Crash)...');
+    console.log('🚀 Starting Bot (Maximum Timeout Mode)...');
 
     if (!EMAIL_USER || !EMAIL_PASS) {
         console.error('❌ Error: Secrets not found.');
@@ -27,6 +27,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
         
         browser = await puppeteer.launch({
             headless: 'new',
+            // เพิ่ม protocolTimeout แก้ปัญหา Chrome ตอบสนองช้า
+            protocolTimeout: 300000, 
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -40,9 +42,9 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         const page = await browser.newPage();
         
-        // ตั้งค่าให้รอนานขึ้นเป็น 2 นาที (120000 ms) ป้องกัน TimeoutError
-        page.setDefaultNavigationTimeout(120000); 
-        page.setDefaultTimeout(120000);
+        // 🔴 ปรับเวลา Timeout เป็น 5 นาที (300,000 ms) หรือ 0 (ไม่จำกัด)
+        page.setDefaultNavigationTimeout(300000); 
+        page.setDefaultTimeout(300000);
 
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
 
@@ -54,21 +56,21 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         // 1. Login
         console.log('🔑 Logging in...');
-        // เพิ่ม waitUntil: 'domcontentloaded' เพื่อให้ผ่านได้ไวขึ้นแม้เน็ตช้า
-        await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'domcontentloaded' });
+        // ใช้ waitUntil: 'load' เพื่อให้แน่ใจว่าโหลดเสร็จจริง
+        await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'load' });
         
         await page.waitForSelector('#txtname');
         await page.type('#txtname', DTC_USER);
         await page.type('#txtpass', DTC_PASS);
         
         await Promise.all([
-            page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
+            page.waitForNavigation({ waitUntil: 'load' }),
             page.click('#btnLogin')
         ]);
         
         // 2. ไปหน้ารายงาน
         console.log('📂 Navigating to report...');
-        await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'domcontentloaded' });
+        await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'load' });
         
         // 3. กรอกข้อมูล
         console.log('📝 Filling form...');
@@ -119,28 +121,27 @@ const EMAIL_TO = process.env.EMAIL_TO;
         });
         
         console.log('⏳ Waiting for Export button...');
-        // รอ Export นานสุด 3 นาที
+        // รอ Export นานสุด 5 นาที
         try {
-            await page.waitForSelector('#btnexport', { visible: true, timeout: 180000 });
+            await page.waitForSelector('#btnexport', { visible: true, timeout: 300000 });
         } catch (e) {
-            console.log('⚠️ Warning: Export button taking too long or not found.');
-            // ลอง Capture หน้าจอถ้า Error (Optional)
+            console.log('⚠️ Warning: Export button taking too long. Trying to proceed anyway...');
         }
 
         // 5. ดาวน์โหลด
         console.log('⬇️ Clicking Export...');
-        // เช็คว่ามีปุ่มไหมก่อนกด
         const exportBtn = await page.$('#btnexport');
         if (exportBtn) {
             await page.click('#btnexport');
         } else {
-            throw new Error('Export button not found on page.');
+            console.error('❌ Export button not found even after waiting.');
+            throw new Error('Export button missing');
         }
 
-        // รอไฟล์
-        console.log('⏳ Waiting for file download...');
+        // รอไฟล์ (เพิ่มรอบการรอเป็น 180 วินาที = 3 นาที)
+        console.log('⏳ Waiting for file download (Max 3 mins)...');
         let fileName;
-        for (let i = 0; i < 90; i++) { // รอ 90 วินาที
+        for (let i = 0; i < 180; i++) {
             await new Promise(resolve => setTimeout(resolve, 1000));
             if (fs.existsSync(downloadPath)) {
                 const files = fs.readdirSync(downloadPath);
@@ -178,7 +179,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('🎉 Done! Email sent.');
 
     } catch (error) {
-        console.error('❌ Error:', error);
+        console.error('❌ Fatal Error:', error);
         if (browser) await browser.close();
         process.exit(1);
     }
