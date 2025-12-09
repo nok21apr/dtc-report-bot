@@ -11,11 +11,10 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 เริ่มต้น Script (GitHub Actions Mode Fixed)...');
+    console.log('🚀 Starting Bot...');
 
-    // ตรวจสอบค่าตัวแปร
     if (!EMAIL_USER || !EMAIL_PASS) {
-        console.error('❌ ไม่พบ EMAIL_USER หรือ EMAIL_PASS ตรวจสอบ Settings > Secrets');
+        console.error('❌ Error: EMAIL_USER or EMAIL_PASS not found in Secrets.');
         process.exit(1);
     }
 
@@ -24,52 +23,56 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
     let browser = null;
     try {
-        console.log('🖥️ กำลังเปิด Chrome...');
+        console.log('🖥️ Launching Chrome...');
         
-        // --- 🔴 จุดแก้ Exit Code 254 (สำคัญที่สุด) ---
+        // --- การตั้งค่าเพื่อแก้ Exit Code 254 ---
         browser = await puppeteer.launch({
             headless: 'new',
             args: [
-                '--no-sandbox',               // ต้องมี
-                '--disable-setuid-sandbox',   // ต้องมี
-                '--disable-dev-shm-usage',    // แก้เมมเต็ม/Crash
-                '--disable-gpu',
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage', // แก้ปัญหา Memory
+                '--disable-accelerated-2d-canvas',
                 '--no-first-run',
                 '--no-zygote',
-                '--single-process'            // ลดโหลด
+                '--disable-gpu'
             ]
         });
 
         const page = await browser.newPage();
+        
+        // ตั้งค่า User Agent
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
 
+        // ตั้งค่า Download
         const client = await page.target().createCDPSession();
         await client.send('Page.setDownloadBehavior', {
             behavior: 'allow',
             downloadPath: downloadPath,
         });
 
-        // --- เริ่มขั้นตอนปกติ ---
-        console.log('1. Login...');
-        await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'networkidle2', timeout: 60000 });
+        // 1. Login
+        console.log('🔑 Logging in...');
+        await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'networkidle0', timeout: 60000 });
         
-        await page.waitForSelector('#txtname', { visible: true });
         await page.type('#txtname', DTC_USER);
         await page.type('#txtpass', DTC_PASS);
         
         await Promise.all([
-            page.waitForNavigation({ waitUntil: 'networkidle2' }),
+            page.waitForNavigation(),
             page.click('#btnLogin')
         ]);
         
-        console.log('2. Navigate Report...');
-        await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'networkidle2', timeout: 60000 });
+        // 2. ไปหน้ารายงาน
+        console.log('📂 Navigating to report...');
+        await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'networkidle0', timeout: 60000 });
         
-        console.log('3. Fill Form...');
+        // 3. กรอกข้อมูล
+        console.log('📝 Filling form...');
         await page.waitForSelector('#speed_max');
         await page.$eval('#speed_max', el => el.value = '55');
 
-        // คำนวณวันที่
+        // คำนวณวันที่ (ตาม Logic เดิมของคุณ)
         const dStart = new Date();
         dStart.setDate(1);
         dStart.setDate(dStart.getDate() - 2);
@@ -102,29 +105,32 @@ const EMAIL_TO = process.env.EMAIL_TO;
                     break;
                 }
             }
-            const event = new Event('change', { bubbles: true });
-            select.dispatchEvent(event);
+            select.dispatchEvent(new Event('change', { bubbles: true }));
         });
 
-        console.log('4. Search...');
+        // 4. ค้นหา
+        console.log('🔎 Searching...');
         await page.evaluate(() => {
              const btn = document.querySelector("span[onclick='sertch_data();']");
              if(btn) btn.click();
         });
         
-        // รอ Export (เพิ่มเวลาเป็น 3 นาที)
+        // รอ Export
+        console.log('⏳ Waiting for Export button...');
         try {
-            await page.waitForSelector('#btnexport', { visible: true, timeout: 180000 });
+            await page.waitForSelector('#btnexport', { visible: true, timeout: 180000 }); // รอ 3 นาที
         } catch (e) {
-            throw new Error('Timeout waiting for Export button');
+            throw new Error('Export button not found (Timeout)');
         }
 
-        console.log('5. Download...');
+        // 5. ดาวน์โหลด
+        console.log('⬇️ Clicking Export...');
         await page.click('#btnexport');
 
-        console.log('6. Waiting for file...');
+        // รอไฟล์
+        console.log('⏳ Waiting for file download...');
         let fileName;
-        for (let i = 0; i < 90; i++) {
+        for (let i = 0; i < 60; i++) { // รอ 60 วินาที
             await new Promise(resolve => setTimeout(resolve, 1000));
             if (fs.existsSync(downloadPath)) {
                 const files = fs.readdirSync(downloadPath);
@@ -133,15 +139,16 @@ const EMAIL_TO = process.env.EMAIL_TO;
             }
         }
 
-        if (!fileName) throw new Error("Timeout: File not found");
+        if (!fileName) throw new Error("File download timeout");
         
         const filePath = path.join(downloadPath, fileName);
-        console.log(`✅ File found: ${fileName}`);
+        console.log(`✅ File downloaded: ${fileName}`);
 
         await browser.close();
         browser = null;
 
-        console.log('7. Sending Email...');
+        // 6. ส่งเมล
+        console.log('📧 Sending email...');
         const transporter = nodemailer.createTransport({
             service: 'gmail',
             auth: {
@@ -153,15 +160,15 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await transporter.sendMail({
             from: `"DTC Bot" <${EMAIL_USER}>`,
             to: EMAIL_TO,
-            subject: `รายงาน DTC Report - ${new Date().toLocaleDateString()}`,
+            subject: `รายงาน DTC Report - ${startDateString.split(' ')[0]}`,
             text: `รายงานประจำวันที่ท่านต้องการครับ`,
             attachments: [{ filename: fileName, path: filePath }]
         });
 
-        console.log('🎉 Success!');
+        console.log('🎉 Done! Email sent.');
 
     } catch (error) {
-        console.error('❌ Error:', error);
+        console.error('❌ Crash Error:', error);
         if (browser) await browser.close();
         process.exit(1);
     }
