@@ -11,10 +11,10 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot...');
+    console.log('🚀 Starting Bot (Fix Timeout & Crash)...');
 
     if (!EMAIL_USER || !EMAIL_PASS) {
-        console.error('❌ Error: EMAIL_USER or EMAIL_PASS not found in Secrets.');
+        console.error('❌ Error: Secrets not found.');
         process.exit(1);
     }
 
@@ -25,13 +25,12 @@ const EMAIL_TO = process.env.EMAIL_TO;
     try {
         console.log('🖥️ Launching Chrome...');
         
-        // --- การตั้งค่าเพื่อแก้ Exit Code 254 ---
         browser = await puppeteer.launch({
             headless: 'new',
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage', // แก้ปัญหา Memory
+                '--disable-dev-shm-usage',
                 '--disable-accelerated-2d-canvas',
                 '--no-first-run',
                 '--no-zygote',
@@ -41,10 +40,12 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         const page = await browser.newPage();
         
-        // ตั้งค่า User Agent
+        // ตั้งค่าให้รอนานขึ้นเป็น 2 นาที (120000 ms) ป้องกัน TimeoutError
+        page.setDefaultNavigationTimeout(120000); 
+        page.setDefaultTimeout(120000);
+
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
 
-        // ตั้งค่า Download
         const client = await page.target().createCDPSession();
         await client.send('Page.setDownloadBehavior', {
             behavior: 'allow',
@@ -53,26 +54,28 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         // 1. Login
         console.log('🔑 Logging in...');
-        await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'networkidle0', timeout: 60000 });
+        // เพิ่ม waitUntil: 'domcontentloaded' เพื่อให้ผ่านได้ไวขึ้นแม้เน็ตช้า
+        await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'domcontentloaded' });
         
+        await page.waitForSelector('#txtname');
         await page.type('#txtname', DTC_USER);
         await page.type('#txtpass', DTC_PASS);
         
         await Promise.all([
-            page.waitForNavigation(),
+            page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
             page.click('#btnLogin')
         ]);
         
         // 2. ไปหน้ารายงาน
         console.log('📂 Navigating to report...');
-        await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'networkidle0', timeout: 60000 });
+        await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'domcontentloaded' });
         
         // 3. กรอกข้อมูล
         console.log('📝 Filling form...');
         await page.waitForSelector('#speed_max');
         await page.$eval('#speed_max', el => el.value = '55');
 
-        // คำนวณวันที่ (ตาม Logic เดิมของคุณ)
+        // คำนวณวันที่
         const dStart = new Date();
         dStart.setDate(1);
         dStart.setDate(dStart.getDate() - 2);
@@ -115,22 +118,29 @@ const EMAIL_TO = process.env.EMAIL_TO;
              if(btn) btn.click();
         });
         
-        // รอ Export
         console.log('⏳ Waiting for Export button...');
+        // รอ Export นานสุด 3 นาที
         try {
-            await page.waitForSelector('#btnexport', { visible: true, timeout: 180000 }); // รอ 3 นาที
+            await page.waitForSelector('#btnexport', { visible: true, timeout: 180000 });
         } catch (e) {
-            throw new Error('Export button not found (Timeout)');
+            console.log('⚠️ Warning: Export button taking too long or not found.');
+            // ลอง Capture หน้าจอถ้า Error (Optional)
         }
 
         // 5. ดาวน์โหลด
         console.log('⬇️ Clicking Export...');
-        await page.click('#btnexport');
+        // เช็คว่ามีปุ่มไหมก่อนกด
+        const exportBtn = await page.$('#btnexport');
+        if (exportBtn) {
+            await page.click('#btnexport');
+        } else {
+            throw new Error('Export button not found on page.');
+        }
 
         // รอไฟล์
         console.log('⏳ Waiting for file download...');
         let fileName;
-        for (let i = 0; i < 60; i++) { // รอ 60 วินาที
+        for (let i = 0; i < 90; i++) { // รอ 90 วินาที
             await new Promise(resolve => setTimeout(resolve, 1000));
             if (fs.existsSync(downloadPath)) {
                 const files = fs.readdirSync(downloadPath);
@@ -168,7 +178,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('🎉 Done! Email sent.');
 
     } catch (error) {
-        console.error('❌ Crash Error:', error);
+        console.error('❌ Error:', error);
         if (browser) await browser.close();
         process.exit(1);
     }
