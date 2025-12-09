@@ -2,10 +2,8 @@ name: Daily DTC Report
 
 on:
   schedule:
-    # รันทุกวันตอน 8:00 น. ประเทศไทย (01:00 UTC)
-    - cron: '0 1 * * *'
-  # ปุ่มกดรันเองเพื่อทดสอบ
-  workflow_dispatch:
+    - cron: '0 1 * * *' # 8.00 น. เวลาไทย
+  workflow_dispatch:      # ปุ่มกดรันมือ
 
 jobs:
   scrape-and-email:
@@ -19,13 +17,12 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: '18'
-        # ลบบรรทัด cache: 'npm' ออกแล้ว เพื่อแก้ปัญหาหาไฟล์ไม่เจอ
+
+    - name: Check File Structure (Debug)
+      run: ls -R  # คำสั่งนี้จะโชว์ว่ามีไฟล์อะไรบ้าง ถ้า package.json หาย เราจะรู้ทันที
 
     - name: Install Dependencies
-      # ใช้ npm install ธรรมดา
-      run: |
-        npm install
-        npm list puppeteer
+      run: npm install
 
     - name: Run Script
       run: node index.js
