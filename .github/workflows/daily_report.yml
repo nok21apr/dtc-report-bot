@@ -2,7 +2,9 @@ name: Daily DTC Report
 
 on:
   schedule:
+    # รันทุกวันตอน 8:00 น. ประเทศไทย (01:00 UTC)
     - cron: '0 1 * * *'
+  # ปุ่มกดรันเองเพื่อทดสอบ
   workflow_dispatch:
 
 jobs:
@@ -17,10 +19,10 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: '18'
-        # ลบบรรทัด cache: 'npm' ออก เพื่อแก้ปัญหา Lock file not found
+        # ลบบรรทัด cache: 'npm' ออกแล้ว เพื่อแก้ปัญหาหาไฟล์ไม่เจอ
 
     - name: Install Dependencies
-      # ใช้ npm install ธรรมดา เพื่อความง่ายและไม่ error เรื่อง lock file
+      # ใช้ npm install ธรรมดา
       run: |
         npm install
         npm list puppeteer
