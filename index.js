@@ -11,40 +11,36 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 เริ่มต้น Script (GitHub Actions Mode)...');
+    console.log('🚀 เริ่มต้น Script (GitHub Actions Mode Fixed)...');
 
-    // ตรวจสอบค่าตัวแปรก่อนเริ่ม (Debug)
+    // ตรวจสอบค่าตัวแปร
     if (!EMAIL_USER || !EMAIL_PASS) {
-        console.error('❌ ไม่พบ EMAIL_USER หรือ EMAIL_PASS ตรวจสอบ Settings > Secrets ใน GitHub');
+        console.error('❌ ไม่พบ EMAIL_USER หรือ EMAIL_PASS ตรวจสอบ Settings > Secrets');
         process.exit(1);
     }
 
     const downloadPath = path.join(__dirname, 'downloads');
-    // สร้างโฟลเดอร์ถ้ายังไม่มี
     if (!fs.existsSync(downloadPath)) fs.mkdirSync(downloadPath);
 
     let browser = null;
     try {
         console.log('🖥️ กำลังเปิด Chrome...');
         
-        // --- จุดสำคัญที่แก้ไข ---
+        // --- 🔴 จุดแก้ Exit Code 254 (สำคัญที่สุด) ---
         browser = await puppeteer.launch({
-            headless: 'new', // หรือใช้ true
+            headless: 'new',
             args: [
-                '--no-sandbox',               // สำคัญมากสำหรับ GitHub Actions
-                '--disable-setuid-sandbox',   // สำคัญมาก
-                '--disable-dev-shm-usage',    // แก้ปัญหา Crash (Exit code 254)
-                '--disable-gpu',              // ไม่ใช้การ์ดจอ
+                '--no-sandbox',               // ต้องมี
+                '--disable-setuid-sandbox',   // ต้องมี
+                '--disable-dev-shm-usage',    // แก้เมมเต็ม/Crash
+                '--disable-gpu',
                 '--no-first-run',
                 '--no-zygote',
-                '--single-process',           // ช่วยลดการกินทรัพยากร
-                '--disable-extensions'
+                '--single-process'            // ลดโหลด
             ]
         });
 
         const page = await browser.newPage();
-        
-        // ตั้งค่า User Agent ให้เหมือนคนจริงป้องกันการโดนบล็อก
         await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
 
         const client = await page.target().createCDPSession();
@@ -53,11 +49,10 @@ const EMAIL_TO = process.env.EMAIL_TO;
             downloadPath: downloadPath,
         });
 
-        // --- 1. เข้าสู่ระบบ ---
-        console.log('🔑 กำลัง Login...');
+        // --- เริ่มขั้นตอนปกติ ---
+        console.log('1. Login...');
         await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'networkidle2', timeout: 60000 });
         
-        // รอให้ Element ปรากฏก่อนพิมพ์ (กันพลาด)
         await page.waitForSelector('#txtname', { visible: true });
         await page.type('#txtname', DTC_USER);
         await page.type('#txtpass', DTC_PASS);
@@ -67,12 +62,10 @@ const EMAIL_TO = process.env.EMAIL_TO;
             page.click('#btnLogin')
         ]);
         
-        // --- 2. ไปหน้ารายงาน ---
-        console.log('📂 ไปหน้ารายงาน...');
+        console.log('2. Navigate Report...');
         await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'networkidle2', timeout: 60000 });
         
-        // --- 3. กรอกข้อมูล ---
-        console.log('📝 กำลังกรอกข้อมูล...');
+        console.log('3. Fill Form...');
         await page.waitForSelector('#speed_max');
         await page.$eval('#speed_max', el => el.value = '55');
 
@@ -100,7 +93,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         await page.select('#ddlMinute', '1');
 
-        // เลือกทะเบียนทั้งหมด
         await page.evaluate(() => {
             const select = document.getElementById('ddl_truck');
             const options = select.options;
@@ -114,29 +106,26 @@ const EMAIL_TO = process.env.EMAIL_TO;
             select.dispatchEvent(event);
         });
 
-        // --- 4. ค้นหาและโหลดไฟล์ ---
-        console.log('🔎 กดค้นหา...');
+        console.log('4. Search...');
         await page.evaluate(() => {
              const btn = document.querySelector("span[onclick='sertch_data();']");
              if(btn) btn.click();
         });
         
-        // รอให้ปุ่ม Export โผล่ (เพิ่ม Timeout ให้นานขึ้นเป็น 3 นาที เผื่อเว็บช้า)
+        // รอ Export (เพิ่มเวลาเป็น 3 นาที)
         try {
             await page.waitForSelector('#btnexport', { visible: true, timeout: 180000 });
         } catch (e) {
-            throw new Error('รอนานเกินไป ปุ่ม Export ไม่ขึ้น หรือไม่มีข้อมูลรายงาน');
+            throw new Error('Timeout waiting for Export button');
         }
 
-        console.log('⬇️ กดดาวน์โหลด...');
+        console.log('5. Download...');
         await page.click('#btnexport');
 
-        // รอไฟล์เข้า
-        console.log('⏳ รอไฟล์บันทึก...');
+        console.log('6. Waiting for file...');
         let fileName;
         for (let i = 0; i < 90; i++) {
             await new Promise(resolve => setTimeout(resolve, 1000));
-            // เช็คว่ามีไฟล์ไหม
             if (fs.existsSync(downloadPath)) {
                 const files = fs.readdirSync(downloadPath);
                 fileName = files.find(f => f.endsWith('.xlsx') || f.endsWith('.xls'));
@@ -144,16 +133,15 @@ const EMAIL_TO = process.env.EMAIL_TO;
             }
         }
 
-        if (!fileName) throw new Error("หมดเวลา: ไฟล์ยังโหลดไม่เสร็จ");
+        if (!fileName) throw new Error("Timeout: File not found");
         
         const filePath = path.join(downloadPath, fileName);
-        console.log(`✅ พบไฟล์: ${fileName} ขนาด: ${fs.statSync(filePath).size} bytes`);
+        console.log(`✅ File found: ${fileName}`);
 
         await browser.close();
-        browser = null; // Clear ตัวแปร
+        browser = null;
 
-        // --- 5. ส่งอีเมล ---
-        console.log('📧 กำลังส่งอีเมล...');
+        console.log('7. Sending Email...');
         const transporter = nodemailer.createTransport({
             service: 'gmail',
             auth: {
@@ -165,16 +153,15 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await transporter.sendMail({
             from: `"DTC Bot" <${EMAIL_USER}>`,
             to: EMAIL_TO,
-            subject: `รายงานประจำวัน (DTC Report) - ${new Date().toLocaleDateString()}`,
-            text: `รายงานประจำวันแนบมาแล้วครับ\nวันที่: ${new Date().toLocaleString()}`,
+            subject: `รายงาน DTC Report - ${new Date().toLocaleDateString()}`,
+            text: `รายงานประจำวันที่ท่านต้องการครับ`,
             attachments: [{ filename: fileName, path: filePath }]
         });
 
-        console.log('🎉 ส่งเมลสำเร็จ! จบการทำงาน');
+        console.log('🎉 Success!');
 
     } catch (error) {
-        console.error('❌ เกิดข้อผิดพลาด:', error);
-        // พยายามปิด Browser ถ้ามันยังเปิดอยู่
+        console.error('❌ Error:', error);
         if (browser) await browser.close();
         process.exit(1);
     }
