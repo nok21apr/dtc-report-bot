@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Enhanced Stability Mode)...');
+    console.log('🚀 Starting Bot (Fast Mode & Debug)...');
 
     if (!EMAIL_USER || !EMAIL_PASS) {
         console.error('❌ Error: Secrets not found.');
@@ -22,6 +22,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
     if (!fs.existsSync(downloadPath)) fs.mkdirSync(downloadPath);
 
     let browser = null;
+    let page = null; // ประกาศตัวแปร page ไว้ข้างนอกเพื่อให้ catch block เรียกใช้ได้
+
     try {
         console.log('🖥️ Launching Chrome...');
         
@@ -36,13 +38,13 @@ const EMAIL_TO = process.env.EMAIL_TO;
                 '--no-first-run',
                 '--no-zygote',
                 '--disable-gpu',
-                '--window-size=1920,1080' // กำหนดขนาดหน้าจอให้เหมือนคอมปกติ
+                '--window-size=1920,1080'
             ]
         });
 
-        const page = await browser.newPage();
+        page = await browser.newPage();
         
-        // Timeout 5 นาที
+        // Timeout 5 นาที (เผื่อเว็บช้าจริงๆ)
         page.setDefaultNavigationTimeout(300000); 
         page.setDefaultTimeout(300000);
 
@@ -56,38 +58,38 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         // 1. Login
         console.log('🔑 Logging in...');
-        await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'networkidle2' });
+        // ปรับเป็น domcontentloaded เพื่อให้ผ่านไวขึ้น ไม่ต้องรอเน็ตนิ่ง
+        await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'domcontentloaded' });
         
-        await page.waitForSelector('#txtname');
-        await page.type('#txtname', DTC_USER, { delay: 50 }); // พิมพ์ทีละตัวเหมือนคน
-        await page.type('#txtpass', DTC_PASS, { delay: 50 });
+        await page.waitForSelector('#txtname', { visible: true });
+        await page.type('#txtname', DTC_USER, { delay: 20 }); 
+        await page.type('#txtpass', DTC_PASS, { delay: 20 });
         
+        console.log('👉 Clicking Login...');
         await Promise.all([
-            page.waitForNavigation({ waitUntil: 'networkidle2' }),
+            page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
             page.click('#btnLogin')
         ]);
         
         // 2. ไปหน้ารายงาน
         console.log('📂 Navigating to report...');
-        await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'networkidle2' });
+        await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'domcontentloaded' });
         
-        // 3. กรอกข้อมูล (ปรับปรุงใหม่ แก้ปัญหา Timezone และ Event Trigger)
-        console.log('📝 Filling form with Thai Date logic...');
-        await page.waitForSelector('#speed_max');
+        // 3. กรอกข้อมูล
+        console.log('📝 Filling form...');
+        await page.waitForSelector('#speed_max', { visible: true });
         
-        // Clear ค่าเก่าและพิมพ์ใหม่ (ชัวร์กว่าการยัด value)
-        await page.click('#speed_max', { clickCount: 3 });
+        // Clear ค่าเก่าและพิมพ์ใหม่
+        await page.evaluate(() => document.getElementById('speed_max').value = '');
         await page.type('#speed_max', '55');
 
-        // คำนวณวันที่แบบระบุ Timezone เป็นไทย (ป้องกันปัญหา UTC)
+        // คำนวณวันที่ (Timezone Thai)
         const now = new Date();
         const thaiDate = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
         
-        // คำนวณวันเริ่มต้น (ย้อนหลัง 2 วัน)
         const dStart = new Date(thaiDate);
         dStart.setDate(dStart.getDate() - 2);
         
-        // คำนวณวันสิ้นสุด (สิ้นเดือน)
         const yEnd = thaiDate.getFullYear();
         const mEnd = thaiDate.getMonth() + 1;
         const lastDayObj = new Date(yEnd, mEnd, 0);
@@ -104,7 +106,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         console.log(`📅 Date Range: ${startDateString} to ${endDateString}`);
 
-        // Inject ค่าและ Trigger Event (จุดสำคัญที่แก้ไข) 🔴
+        // Inject ค่าและ Trigger Event
         await page.evaluate((start, end) => {
             const date9 = document.getElementById('date9');
             const date10 = document.getElementById('date10');
@@ -112,11 +114,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
             date9.value = start;
             date10.value = end;
             
-            // แจ้งเว็บว่าค่าเปลี่ยนแล้วนะ (สำคัญมาก!)
             date9.dispatchEvent(new Event('change', { bubbles: true }));
-            date9.dispatchEvent(new Event('input', { bubbles: true }));
             date10.dispatchEvent(new Event('change', { bubbles: true }));
-            date10.dispatchEvent(new Event('input', { bubbles: true }));
         }, startDateString, endDateString);
 
         await page.select('#ddlMinute', '1');
@@ -125,63 +124,51 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await page.evaluate(() => {
             const select = document.getElementById('ddl_truck');
             const options = select.options;
-            let found = false;
             for (let i = 0; i < options.length; i++) {
                 if (options[i].text.includes('ทั้งหมด')) {
                     select.value = options[i].value;
-                    found = true;
+                    select.dispatchEvent(new Event('change', { bubbles: true }));
                     break;
                 }
-            }
-            if(found) {
-                select.dispatchEvent(new Event('change', { bubbles: true }));
             }
         });
 
         // 4. ค้นหา
         console.log('🔎 Searching...');
-        // ลองกดด้วย Selector เดิม ถ้าไม่ได้ให้ลองวิธีอื่น
         try {
-            await page.waitForSelector("span[onclick='sertch_data();']", { timeout: 5000 });
-            await page.click("span[onclick='sertch_data();']");
-        } catch (e) {
-            console.log('⚠️ Standard search button not found, trying JS execution...');
+            // ใช้ JS click โดยตรง ชัวร์กว่า Selector
             await page.evaluate(() => {
-                if(typeof sertch_data === 'function') {
-                    sertch_data(); // เรียกฟังก์ชันของเว็บโดยตรงเลย (ชัวร์สุด)
-                } else {
-                    console.error('Function sertch_data not found!');
-                }
+                const searchBtn = document.querySelector("span[onclick='sertch_data();']");
+                if (searchBtn) searchBtn.click();
+                else if (typeof sertch_data === 'function') sertch_data();
             });
+        } catch (e) {
+            console.error('⚠️ Search click failed, trying alternative...');
         }
         
         console.log('⏳ Waiting for Export button...');
-        // รอ Export
+        // รอ Export (ถ้านานเกิน 2 นาที ให้ถ่ายรูปเช็ค)
         try {
-            await page.waitForSelector('#btnexport', { visible: true, timeout: 300000 });
+            await page.waitForSelector('#btnexport', { visible: true, timeout: 120000 });
         } catch (e) {
-            console.log('⚠️ Warning: Export button taking too long. Check if data exists.');
-            // ถ่ายรูปหน้าจอตอน Error เก็บไว้ดู (ถ้า Run บน Local จะเห็นไฟล์นี้)
-            try { await page.screenshot({ path: 'error_screenshot.png' }); } catch(err){}
+            console.error('❌ Export button not found within 2 mins. Taking screenshot...');
+            await page.screenshot({ path: path.join(downloadPath, 'error_no_export.png') });
+            throw new Error('Export button missing (Screenshot saved)');
         }
 
         // 5. ดาวน์โหลด
         console.log('⬇️ Clicking Export...');
-        const exportBtn = await page.$('#btnexport');
-        if (exportBtn) {
-            // ดักจับ Request ดาวน์โหลด
-            await page.click('#btnexport');
-        } else {
-            throw new Error('Export button missing - No data found or login failed');
-        }
+        await page.click('#btnexport');
 
         // รอไฟล์
-        console.log('⏳ Waiting for file download (Max 3 mins)...');
+        console.log('⏳ Waiting for file download...');
         let fileName;
+        // รอ 3 นาที
         for (let i = 0; i < 180; i++) {
             await new Promise(resolve => setTimeout(resolve, 1000));
             if (fs.existsSync(downloadPath)) {
                 const files = fs.readdirSync(downloadPath);
+                // หาไฟล์ excel หรือ png (ถ้ามี error screenshot)
                 fileName = files.find(f => f.endsWith('.xlsx') || f.endsWith('.xls'));
                 if (fileName) break;
             }
@@ -217,6 +204,18 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
     } catch (error) {
         console.error('❌ Fatal Error:', error);
+        
+        // ถ่ายรูปหน้าจอตอน Error ไว้ดู (ถ้าทำได้)
+        if (page && !page.isClosed()) {
+            try {
+                const screenshotPath = path.join(downloadPath, 'fatal_error.png');
+                await page.screenshot({ path: screenshotPath });
+                console.log(`📸 Screenshot saved at: ${screenshotPath}`);
+            } catch (e) {
+                console.error('Could not take screenshot');
+            }
+        }
+
         if (browser) await browser.close();
         process.exit(1);
     }
