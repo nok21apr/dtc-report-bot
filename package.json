@@ -4,7 +4,7 @@
   "description": "DTC Report Bot",
   "main": "index.js",
   "dependencies": {
-    "puppeteer": "^21.5.0",
-    "nodemailer": "^6.9.7"
+    "puppeteer": "^19.4.0",
+    "nodemailer": "^6.9.1"
   }
 }
