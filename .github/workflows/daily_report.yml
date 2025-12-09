@@ -17,13 +17,13 @@ jobs:
       uses: actions/setup-node@v3
       with:
         node-version: '18'
-        cache: 'npm' # ช่วยให้โหลดเร็วขึ้น
+        # ลบบรรทัด cache: 'npm' ออก เพื่อแก้ปัญหา Lock file not found
 
     - name: Install Dependencies
-      # ใช้ npm ci เพื่อความสะอาดและชัวร์กว่า npm install
+      # ใช้ npm install ธรรมดา เพื่อความง่ายและไม่ error เรื่อง lock file
       run: |
         npm install
-        npm list puppeteer # เช็คว่าลงจริงไหม
+        npm list puppeteer
 
     - name: Run Script
       run: node index.js
