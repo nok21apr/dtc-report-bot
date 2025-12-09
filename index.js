@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Fast Mode & Debug)...');
+    console.log('🚀 Starting Bot (UI.Vision Logic Ported)...');
 
     if (!EMAIL_USER || !EMAIL_PASS) {
         console.error('❌ Error: Secrets not found.');
@@ -22,7 +22,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
     if (!fs.existsSync(downloadPath)) fs.mkdirSync(downloadPath);
 
     let browser = null;
-    let page = null; // ประกาศตัวแปร page ไว้ข้างนอกเพื่อให้ catch block เรียกใช้ได้
+    let page = null;
 
     try {
         console.log('🖥️ Launching Chrome...');
@@ -44,7 +44,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         page = await browser.newPage();
         
-        // Timeout 5 นาที (เผื่อเว็บช้าจริงๆ)
+        // Timeout 5 นาที ตาม Logic UI.Vision (เผื่อโหลดนาน)
         page.setDefaultNavigationTimeout(300000); 
         page.setDefaultTimeout(300000);
 
@@ -56,43 +56,58 @@ const EMAIL_TO = process.env.EMAIL_TO;
             downloadPath: downloadPath,
         });
 
-        // 1. Login
-        console.log('🔑 Logging in...');
-        // ปรับเป็น domcontentloaded เพื่อให้ผ่านไวขึ้น ไม่ต้องรอเน็ตนิ่ง
+        // --- Step 1: เปิดหน้าล็อกอิน ---
+        console.log('1. Opening Login Page...');
         await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'domcontentloaded' });
         
+        // --- Step 2-4: กรอกรหัสและเข้าสู่ระบบ ---
+        console.log('2-4. Logging in...');
         await page.waitForSelector('#txtname', { visible: true });
-        await page.type('#txtname', DTC_USER, { delay: 20 }); 
-        await page.type('#txtpass', DTC_PASS, { delay: 20 });
+        await page.type('#txtname', DTC_USER, { delay: 50 }); 
+        await page.type('#txtpass', DTC_PASS, { delay: 50 });
         
-        console.log('👉 Clicking Login...');
         await Promise.all([
             page.waitForNavigation({ waitUntil: 'domcontentloaded' }),
             page.click('#btnLogin')
         ]);
+
+        // --- Step 5: หยุดรอ 5 วินาที (ตาม UI.Vision) ---
+        console.log('5. Pausing 5s (UI.Vision logic)...');
+        await new Promise(r => setTimeout(r, 5000));
         
-        // 2. ไปหน้ารายงาน
-        console.log('📂 Navigating to report...');
+        // --- Step 6: เปิดหน้ารายงานโดยตรง ---
+        console.log('6. Navigating to Report_03.php...');
         await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'domcontentloaded' });
         
-        // 3. กรอกข้อมูล
-        console.log('📝 Filling form...');
-        await page.waitForSelector('#speed_max', { visible: true });
+        // --- Step 7: หยุดรอ 5 วินาที (ตาม UI.Vision) ---
+        console.log('7. Pausing 5s for form load...');
+        await new Promise(r => setTimeout(r, 5000));
         
-        // Clear ค่าเก่าและพิมพ์ใหม่
-        await page.evaluate(() => document.getElementById('speed_max').value = '');
+        // --- Step 8: กำหนดความเร็วสูงสุด ---
+        console.log('8. Setting Speed Max...');
+        await page.waitForSelector('#speed_max', { visible: true });
+        await page.evaluate(() => document.getElementById('speed_max').value = ''); // Clear ก่อน
         await page.type('#speed_max', '55');
 
-        // คำนวณวันที่ (Timezone Thai)
+        // --- Step 9-12: คำนวณและกรอกวันที่ (สูตรจาก UI.Vision) ---
+        console.log('9-12. Setting Date Range (UI.Vision Formula)...');
+        
+        // Logic จาก UI.Vision: 
+        // Start Date: วันที่ 1 ของเดือนปัจจุบัน ลบไป 2 วัน
+        // End Date: วันสุดท้ายของเดือนปัจจุบัน
+        
         const now = new Date();
         const thaiDate = new Date(now.toLocaleString("en-US", { timeZone: "Asia/Bangkok" }));
         
+        // คำนวณ startDate (เหมือน executeScript ในข้อ 9)
         const dStart = new Date(thaiDate);
-        dStart.setDate(dStart.getDate() - 2);
+        dStart.setDate(1); // ไปวันที่ 1 ของเดือน
+        dStart.setDate(dStart.getDate() - 2); // ถอยหลัง 2 วัน
         
+        // คำนวณ endDate (เหมือน executeScript ในข้อ 11)
         const yEnd = thaiDate.getFullYear();
         const mEnd = thaiDate.getMonth() + 1;
-        const lastDayObj = new Date(yEnd, mEnd, 0);
+        const lastDayObj = new Date(yEnd, mEnd, 0); // วันสุดท้ายของเดือน
         
         const formatDate = (date) => {
             const y = date.getFullYear();
@@ -114,53 +129,59 @@ const EMAIL_TO = process.env.EMAIL_TO;
             date9.value = start;
             date10.value = end;
             
+            // Trigger events
             date9.dispatchEvent(new Event('change', { bubbles: true }));
             date10.dispatchEvent(new Event('change', { bubbles: true }));
         }, startDateString, endDateString);
 
+        // --- Step 13: เลือกนาที ---
+        console.log('13. Selecting Minute...');
         await page.select('#ddlMinute', '1');
 
-        // เลือกทะเบียน
+        // --- Step 14: เลือกทะเบียน "ทั้งหมด" (JavaScript Logic) ---
+        console.log('14. Selecting Truck "All"...');
         await page.evaluate(() => {
-            const select = document.getElementById('ddl_truck');
-            const options = select.options;
-            for (let i = 0; i < options.length; i++) {
+            const selectElement = document.getElementById('ddl_truck');
+            const options = selectElement.options;
+            for (var i = 0; i < options.length; i++) {
                 if (options[i].text.includes('ทั้งหมด')) {
-                    select.value = options[i].value;
-                    select.dispatchEvent(new Event('change', { bubbles: true }));
+                    selectElement.value = options[i].value;
                     break;
                 }
             }
+            var event = new Event('change', { bubbles: true });
+            selectElement.dispatchEvent(event);
         });
 
-        // 4. ค้นหา
-        console.log('🔎 Searching...');
+        // --- Step 15: คลิกปุ่มค้นหา ---
+        console.log('15. Clicking Search...');
         try {
-            // ใช้ JS click โดยตรง ชัวร์กว่า Selector
-            await page.evaluate(() => {
-                const searchBtn = document.querySelector("span[onclick='sertch_data();']");
-                if (searchBtn) searchBtn.click();
-                else if (typeof sertch_data === 'function') sertch_data();
-            });
+            await page.waitForSelector("span[onclick='sertch_data();']", { visible: true, timeout: 5000 });
+            await page.click("span[onclick='sertch_data();']");
         } catch (e) {
-            console.error('⚠️ Search click failed, trying alternative...');
+            console.warn('⚠️ Search button selector failed, executing script directly...');
+            await page.evaluate(() => { if(typeof sertch_data === 'function') sertch_data(); });
         }
         
-        console.log('⏳ Waiting for Export button...');
-        // รอ Export (ถ้านานเกิน 2 นาที ให้ถ่ายรูปเช็ค)
+        // --- Step 16: รอข้อมูล 120 วินาที (UI.Vision pause 120000) ---
+        // เราใช้ waitForSelector แทน pause เพื่อความฉลาดกว่า (ถ้ามาเร็วกก็ไปเลย)
+        console.log('16. Waiting for Export button (Max 120s)...');
         try {
             await page.waitForSelector('#btnexport', { visible: true, timeout: 120000 });
         } catch (e) {
-            console.error('❌ Export button not found within 2 mins. Taking screenshot...');
+            console.error('❌ Export button not found within 120s.');
             await page.screenshot({ path: path.join(downloadPath, 'error_no_export.png') });
             throw new Error('Export button missing (Screenshot saved)');
         }
 
-        // 5. ดาวน์โหลด
-        console.log('⬇️ Clicking Export...');
+        // --- Step 17: รอ Export พร้อม (UI.Vision waitForElementVisible) ---
+        // (ทำไปแล้วในขั้นตอน 16)
+
+        // --- Step 18: คลิกปุ่ม Export ---
+        console.log('18. Clicking Export...');
         await page.click('#btnexport');
 
-        // รอไฟล์
+        // รอไฟล์ดาวน์โหลด
         console.log('⏳ Waiting for file download...');
         let fileName;
         // รอ 3 นาที
@@ -168,7 +189,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
             await new Promise(resolve => setTimeout(resolve, 1000));
             if (fs.existsSync(downloadPath)) {
                 const files = fs.readdirSync(downloadPath);
-                // หาไฟล์ excel หรือ png (ถ้ามี error screenshot)
                 fileName = files.find(f => f.endsWith('.xlsx') || f.endsWith('.xls'));
                 if (fileName) break;
             }
@@ -182,7 +202,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await browser.close();
         browser = null;
 
-        // 6. ส่งเมล
+        // ส่งเมล
         console.log('📧 Sending email...');
         const transporter = nodemailer.createTransport({
             service: 'gmail',
@@ -195,8 +215,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await transporter.sendMail({
             from: `"DTC Bot" <${EMAIL_USER}>`,
             to: EMAIL_TO,
-            subject: `รายงาน DTC Report - ${startDateString.split(' ')[0]}`,
-            text: `รายงานประจำวันที่ท่านต้องการครับ`,
+            subject: `รายงาน DTC Overspeed Report - ${startDateString.split(' ')[0]}`,
+            text: `รายงานประจำวัน (สร้างจาก Logic UI.Vision)\nช่วงเวลา: ${startDateString} ถึง ${endDateString}`,
             attachments: [{ filename: fileName, path: filePath }]
         });
 
@@ -205,7 +225,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
     } catch (error) {
         console.error('❌ Fatal Error:', error);
         
-        // ถ่ายรูปหน้าจอตอน Error ไว้ดู (ถ้าทำได้)
         if (page && !page.isClosed()) {
             try {
                 const screenshotPath = path.join(downloadPath, 'fatal_error.png');
