@@ -19,7 +19,7 @@ jobs:
         node-version: '18'
 
     - name: Check File Structure (Debug)
-      run: ls -R  # คำสั่งนี้จะโชว์ว่ามีไฟล์อะไรบ้าง ถ้า package.json หาย เราจะรู้ทันที
+      run: ls -R  # ถ้าดูใน Log แล้วไม่เห็น package.json แสดงว่าคุณสร้างผิดที่
 
     - name: Install Dependencies
       run: npm install
