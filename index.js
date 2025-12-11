@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Fast & Aggressive Mode)...');
+    console.log('🚀 Starting Bot (Super Stable Mode)...');
 
     // ตรวจสอบตัวแปร
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
@@ -34,6 +34,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
+                '--disable-accelerated-2d-canvas', // ลดภาระกราฟิก แก้ Crash
+                '--disable-software-rasterizer',   // ลดภาระ CPU แก้ Crash
                 '--window-size=1920,1080',
                 '--lang=th-TH,th'
             ]
@@ -41,9 +43,9 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         page = await browser.newPage();
         
-        // Timeout 2 นาทีพอ (ถ้านานกว่านี้คือค้าง)
-        page.setDefaultNavigationTimeout(120000);
-        page.setDefaultTimeout(120000);
+        // Timeout 3 นาที (กลางๆ ไม่นานเกินไป)
+        page.setDefaultNavigationTimeout(180000);
+        page.setDefaultTimeout(180000);
 
         // ตั้งค่า Timezone
         await page.emulateTimezone('Asia/Bangkok');
@@ -57,49 +59,55 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         // --- Step 1: เปิดหน้าล็อกอิน ---
         console.log('Command 1: Open Login Page');
-        // ใช้ domcontentloaded เพื่อความไว ไม่รอเน็ตนิ่ง
         await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'domcontentloaded' });
 
-        // --- Step 2-4: Login ---
+        // --- Step 2-4: Login (Improved Reliability) ---
         console.log('Command 2-4: Login...');
         await page.waitForSelector('#txtname', { visible: true });
+        
+        // กรอกข้อมูล
         await page.type('#txtname', DTC_USER);
         await page.type('#txtpass', DTC_PASS);
         
-        console.log('👉 Clicking Login button...');
-        // วิธีใหม่: กดแล้วรอแค่ 5 วิ ถ้าไม่ไปต่อ เดี๋ยวสั่ง goto เอง
-        await page.click('#btnLogin');
+        console.log('👉 Clicking Login button (JS Method)...');
         
-        try {
-            // รอหน้าเปลี่ยนแค่ 10 วินาที
-            await page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 10000 });
-        } catch (e) {
-            console.log('⚠️ Navigation took too long, forcing redirect...');
-        }
+        // ใช้ JavaScript กดปุ่มโดยตรง (เสถียรกว่า page.click)
+        await page.evaluate(() => {
+            const btn = document.getElementById('btnLogin');
+            if(btn) btn.click();
+        });
 
-        // --- Step 5: Pause 5000 ---
-        console.log('Command 5: Pause 5s');
-        await new Promise(r => setTimeout(r, 5000));
+        // รอตรวจสอบว่า Login ผ่านไหม (รอให้ช่อง User หายไป)
+        try {
+            console.log('⏳ Verifying Login...');
+            await page.waitForFunction(() => !document.querySelector('#txtname'), { timeout: 15000 });
+            console.log('✅ Login Successful (Input disappeared)');
+        } catch (e) {
+            console.log('⚠️ Login check timed out, trying to click again...');
+            // ลองกดซ้ำอีกรอบเผื่อรอบแรกไม่ติด
+            await page.evaluate(() => {
+                const btn = document.getElementById('btnLogin');
+                if(btn) btn.click();
+            });
+            await new Promise(r => setTimeout(r, 5000));
+        }
 
         // --- Step 6: Force Open Report Page ---
-        // ไม่สนว่า Login สำเร็จไหม สั่งกระโดดไปหน้ารายงานเลย (ถ้า Login ติด session จะตามมาเอง)
-        console.log('Command 6: Force Open Report Page');
+        console.log('Command 6: Go to Report Page');
         await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'domcontentloaded' });
 
-        // เช็คว่าเข้าหน้ารายงานได้จริงไหม (เช็ค Login)
+        // เช็คความชัวร์ว่าเข้ามาได้จริงไหม
         const isLoginPage = await page.$('#txtname');
         if (isLoginPage) {
+            // ถ่ายรูปเก็บไว้ดูว่าทำไมยังอยู่หน้า Login
+            await page.screenshot({ path: path.join(downloadPath, 'error_login_failed.png') });
             throw new Error("Login Failed: Still on login page.");
         }
-
-        // --- Step 7: Pause 5000 ---
-        console.log('Command 7: Pause 5s');
-        await new Promise(r => setTimeout(r, 5000));
 
         // --- Step 8: Type Speed Max ---
         console.log('Command 8: Set Speed Max = 55');
         try {
-            await page.waitForSelector('#speed_max', { timeout: 10000 });
+            await page.waitForSelector('#speed_max', { timeout: 30000 }); // รอ Input นานหน่อย
             await page.evaluate(() => document.getElementById('speed_max').value = '');
             await page.type('#speed_max', '55');
         } catch (e) {
@@ -161,24 +169,29 @@ const EMAIL_TO = process.env.EMAIL_TO;
             await searchBtn[0].click();
         } else {
             console.warn('XPath search failed, trying JS click...');
-            await page.evaluate(() => sertch_data());
+            await page.evaluate(() => {
+                if(typeof sertch_data === 'function') sertch_data();
+            });
         }
 
         // --- Step 16: Wait for Export Button ---
         console.log('Command 16: Waiting for Export button...');
-        // รอสูงสุด 1 นาทีพอ
+        // รอสูงสุด 2 นาที
         try {
-            await page.waitForSelector('#btnexport', { visible: true, timeout: 60000 });
+            await page.waitForSelector('#btnexport', { visible: true, timeout: 120000 });
             console.log('✅ Export button appeared!');
         } catch (e) {
             console.error('⚠️ Warning: Wait timeout, attempting to click anyway...');
-            // ถ่ายรูปดูหน่อยว่าทำไมไม่ขึ้น
             await page.screenshot({ path: path.join(downloadPath, 'debug_no_export.png') });
         }
 
         // --- Step 17 & 18: Click Export ---
         console.log('Command 17-18: Exporting...');
-        await page.click('#btnexport');
+        // ใช้ JS click ป้องกัน error element not interactive
+        await page.evaluate(() => {
+             const btn = document.getElementById('btnexport');
+             if(btn) btn.click();
+        });
 
         // --- รอไฟล์ดาวน์โหลด ---
         console.log('⏳ Downloading file...');
@@ -208,8 +221,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await transporter.sendMail({
             from: `"DTC Bot" <${EMAIL_USER}>`,
             to: EMAIL_TO,
-            subject: `รายงาน DTC Report (Aggressive Mode) - ${new Date().toLocaleDateString()}`,
-            text: `รายงานประจำวัน (Fast Mode)\nช่วงเวลา: ${dateResult.start} ถึง ${dateResult.end}`,
+            subject: `รายงาน DTC Report (Stable Mode) - ${new Date().toLocaleDateString()}`,
+            text: `รายงานประจำวัน (Stable Mode)\nช่วงเวลา: ${dateResult.start} ถึง ${dateResult.end}`,
             attachments: [{ filename: fileName, path: path.join(downloadPath, fileName) }]
         });
 
@@ -217,7 +230,9 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
     } catch (error) {
         console.error('❌ Fatal Error:', error);
-        if (page) await page.screenshot({ path: path.join(downloadPath, 'fatal_error.png') });
+        if (page && !page.isClosed()) {
+             try { await page.screenshot({ path: path.join(downloadPath, 'fatal_error.png') }); } catch(e){}
+        }
         if (browser) await browser.close();
         process.exit(1);
     }
