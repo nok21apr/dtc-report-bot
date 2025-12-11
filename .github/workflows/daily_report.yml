@@ -2,8 +2,8 @@ name: Daily DTC Report
 
 on:
   schedule:
-    - cron: '0 1 * * *' # 8.00 น. เวลาไทย
-  workflow_dispatch:      # ปุ่มกดรันมือ
+    - cron: '0 1 * * *'
+  workflow_dispatch:
 
 jobs:
   scrape-and-email:
@@ -13,13 +13,8 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
-    - name: Setup Node.js
-      uses: actions/setup-node@v3
-      with:
-        node-version: '18'
-
-    - name: Check File Structure (Debug)
-      run: ls -R  # ถ้าดูใน Log แล้วไม่เห็น package.json แสดงว่าคุณสร้างผิดที่
+    - name: Check File Structure
+      run: ls -R
 
     - name: Install Dependencies
       run: npm install
@@ -32,3 +27,12 @@ jobs:
         EMAIL_USER: ${{ secrets.EMAIL_USER }}
         EMAIL_PASS: ${{ secrets.EMAIL_PASS }}
         EMAIL_TO: ${{ secrets.EMAIL_TO }}
+
+    # ส่วนนี้จะช่วยให้คุณเห็นหน้าจอตอน Error ได้
+    - name: Upload Debug Screenshots
+      if: always() 
+      uses: actions/upload-artifact@v4
+      with:
+        name: debug-screenshots
+        path: downloads/*.png
+        retention-days: 5
