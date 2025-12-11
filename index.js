@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Long Wait Mode)...');
+    console.log('🚀 Starting Bot (UI.Vision Exact Timing Mode)...');
 
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
         console.error('❌ Error: Secrets incomplete.');
@@ -40,9 +40,9 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         page = await browser.newPage();
         
-        // Timeout รวมทั้งระบบ 10 นาที (เผื่อรอนานมาก)
-        page.setDefaultNavigationTimeout(600000);
-        page.setDefaultTimeout(600000);
+        // Timeout รวมยาวๆ 15 นาที (เผื่อรอทุก step)
+        page.setDefaultNavigationTimeout(900000);
+        page.setDefaultTimeout(900000);
 
         await page.emulateTimezone('Asia/Bangkok');
 
@@ -70,15 +70,11 @@ const EMAIL_TO = process.env.EMAIL_TO;
         }
 
         // ---------------------------------------------------------
-        // Step 2: Go to Report
+        // Step 2: Navigate & Fill Form
         // ---------------------------------------------------------
-        console.log('📄 Step 2: Navigate to Report...');
+        console.log('📄 Step 2: Navigate & Fill Form...');
         await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'domcontentloaded' });
-
-        // ---------------------------------------------------------
-        // Step 3: Fill Form
-        // ---------------------------------------------------------
-        console.log('📝 Step 3: Fill Form...');
+        
         await page.waitForSelector('#speed_max', { visible: true, timeout: 60000 });
         
         await page.evaluate(() => {
@@ -94,19 +90,17 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
             document.getElementById('date9').value = start;
             document.getElementById('date10').value = end;
-            document.getElementById('date9').dispatchEvent(new Event('change'));
-            document.getElementById('date10').dispatchEvent(new Event('change'));
-
+            
             document.getElementById('ddlMinute').value = '1';
             
             const sel = document.getElementById('ddl_truck');
             for(let o of sel.options) {
-                if(o.text.includes('ทั้งหมด')) { 
-                    sel.value = o.value; 
-                    sel.dispatchEvent(new Event('change', { bubbles: true }));
-                    break; 
-                }
+                if(o.text.includes('ทั้งหมด')) { sel.value = o.value; break; }
             }
+            // Trigger Change
+            document.getElementById('date9').dispatchEvent(new Event('change'));
+            document.getElementById('date10').dispatchEvent(new Event('change'));
+            sel.dispatchEvent(new Event('change'));
         });
 
         // ---------------------------------------------------------
@@ -119,69 +113,55 @@ const EMAIL_TO = process.env.EMAIL_TO;
         });
 
         // ---------------------------------------------------------
-        // Step 5: Wait for Export (แก้ไขจุดนี้)
+        // Step 5: Wait 120s (ตาม UI.Vision เป๊ะๆ)
         // ---------------------------------------------------------
-        console.log('⏳ Step 5: Waiting for Report Loading (Max 5 mins)...');
+        console.log('⏳ Step 5: Waiting 120s for Data Processing (UI.Vision Pause)...');
         
-        // ตรงนี้คือจุดสำคัญ: ตั้งเวลารอสูงสุดไว้ 300,000 ms (5 นาที)
-        // บอทจะรอจนกว่าปุ่ม #btnexport จะโผล่มา ถ้ามาเมื่อไหร่ก็ไปต่อทันที
-        try {
-            await page.waitForSelector('#btnexport', { visible: true, timeout: 300000 });
-            console.log('✅ Report Loaded! Export button appeared.');
-        } catch (e) {
-            // ถ้าเกิน 5 นาทีแล้วยังไม่มา ให้ถ่ายรูปส่งมาดู
-            await page.screenshot({ path: path.join(downloadPath, 'error_report_timeout.png') });
-            throw new Error('❌ Timeout: Report took longer than 5 minutes to load.');
-        }
-
-        // รอแถมอีก 10 วินาที เพื่อความชัวร์ (Loading Overlay อาจจะยังไม่หายดี)
-        console.log('   Safety wait 10s...');
-        await new Promise(r => setTimeout(r, 10000));
+        // รอให้ปุ่ม Export โผล่ก่อน
+        await page.waitForSelector('#btnexport', { visible: true, timeout: 300000 });
+        
+        // 🔴 จุดสำคัญ: บังคับรอ 120 วินาที (2 นาที) เพื่อให้ตารางโหลดเสร็จสมบูรณ์
+        // นี่คือสิ่งที่ UI.Vision ทำในคำสั่ง "pause | 120000"
+        await new Promise(r => setTimeout(r, 120000));
+        
+        console.log('✅ 120s Wait Complete. Data should be ready.');
 
         // ---------------------------------------------------------
         // Step 6: Export & Download
         // ---------------------------------------------------------
-        console.log('⬇️ Step 6: Exporting...');
+        console.log('⬇️ Step 6: Clicking Export...');
         
+        // กดปุ่ม Export
+        await page.evaluate(() => document.getElementById('btnexport').click());
+        
+        console.log('⏳ Waiting for file download (Max 5 mins)...');
         let fileDownloaded = false;
-        let attempts = 0;
         
-        while (!fileDownloaded && attempts < 5) {
-            attempts++;
-            console.log(`   Attempt ${attempts}: Clicking Export...`);
-            
-            // กดปุ่ม
-            await page.evaluate(() => document.getElementById('btnexport').click());
-            
-            // รอเช็คไฟล์ 20 วินาที
-            for (let i = 0; i < 20; i++) {
-                await new Promise(r => setTimeout(r, 1000));
-                const files = fs.readdirSync(downloadPath);
-                if (files.some(f => f.endsWith('.xlsx') || f.endsWith('.xls'))) {
-                    fileDownloaded = true;
-                    break;
-                }
+        // รอไฟล์เข้าสูงสุด 5 นาที (300 วินาที)
+        for (let i = 0; i < 300; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            const files = fs.readdirSync(downloadPath);
+            // หาไฟล์ .xlsx ที่ไม่ใช่ไฟล์ชั่วคราว (.crdownload)
+            if (files.some(f => (f.endsWith('.xlsx') || f.endsWith('.xls')) && !f.endsWith('.crdownload'))) {
+                fileDownloaded = true;
+                break;
             }
-            if (fileDownloaded) break;
+            
+            // Log ทุก 30 วินาทีเพื่อให้รู้ว่ายังทำงานอยู่
+            if (i % 30 === 0) console.log(`   ...waiting ${i}s`);
         }
 
-        // รอรอบสุดท้าย 60 วินาที
         if (!fileDownloaded) {
-            console.log('⏳ Final Wait for download...');
-            for (let i = 0; i < 60; i++) {
-                await new Promise(r => setTimeout(r, 1000));
-                const files = fs.readdirSync(downloadPath);
-                if (files.some(f => f.endsWith('.xlsx') || f.endsWith('.xls'))) {
-                    fileDownloaded = true;
-                    break;
-                }
-            }
+            await page.screenshot({ path: path.join(downloadPath, 'error_download_timeout.png') });
+            throw new Error('❌ Download Timeout: File did not arrive within 5 minutes.');
         }
 
-        if (!fileDownloaded) throw new Error('Download Failed');
-
-        const finalFile = fs.readdirSync(downloadPath).find(f => f.endsWith('.xlsx') || f.endsWith('.xls'));
-        console.log(`✅ File: ${finalFile}`);
+        const finalFile = fs.readdirSync(downloadPath).find(f => (f.endsWith('.xlsx') || f.endsWith('.xls')) && !f.endsWith('.crdownload'));
+        console.log(`✅ File Downloaded: ${finalFile}`);
+        
+        // รออีกนิดเพื่อให้ไฟล์เขียนเสร็จสมบูรณ์ 100%
+        await new Promise(r => setTimeout(r, 5000)); 
+        
         await browser.close();
 
         // ---------------------------------------------------------
