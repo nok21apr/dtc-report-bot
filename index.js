@@ -11,9 +11,8 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Stealth Mode)...');
+    console.log('🚀 Starting Bot (Force Login Mode)...');
 
-    // ตรวจสอบตัวแปร
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
         console.error('❌ Error: Secrets incomplete.');
         process.exit(1);
@@ -29,31 +28,19 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('🖥️ Launching Browser...');
         browser = await puppeteer.launch({
             headless: 'new',
-            ignoreHTTPSErrors: true, // สำคัญ: ข้าม Error ความปลอดภัย
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
-                '--disable-web-security', // ปิดความปลอดภัยเว็บชั่วคราว
-                '--disable-features=IsolateOrigins,site-per-process',
                 '--window-size=1920,1080',
                 '--lang=th-TH,th'
             ]
         });
 
         page = await browser.newPage();
-        
-        // Timeout 3 นาที
-        page.setDefaultNavigationTimeout(180000);
+        page.setDefaultNavigationTimeout(180000); // 3 นาที
         page.setDefaultTimeout(180000);
-
-        // ปลอมตัวเป็นคน (สำคัญมากสำหรับ Step 1)
-        await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36');
-        await page.setExtraHTTPHeaders({
-            'Accept-Language': 'th-TH,th;q=0.9,en-US;q=0.8,en;q=0.7',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        });
 
         await page.emulateTimezone('Asia/Bangkok');
 
@@ -64,71 +51,89 @@ const EMAIL_TO = process.env.EMAIL_TO;
         });
 
         // ---------------------------------------------------------
-        // Step 1: Access Website
+        // Step 1: Open Page
         // ---------------------------------------------------------
-        console.log('🌐 Step 1: Going to DTC Website...');
+        console.log('🌐 Step 1: Opening DTC Website...');
+        await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'domcontentloaded' });
         
-        try {
-            await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'domcontentloaded' });
-        } catch (e) {
-            console.error('❌ Failed to load page:', e.message);
-            throw e;
-        }
-
-        // เช็คว่าเข้าเว็บได้จริงไหม
-        const pageTitle = await page.title();
-        console.log(`📄 Page Title: "${pageTitle}"`); // ดู Log ตรงนี้ว่าขึ้นชื่อเว็บไหม
-        
-        // ถ่ายรูปดูหน้าตาเว็บหน่อย
-        await page.screenshot({ path: path.join(downloadPath, '1_homepage.png') });
-
-        // เช็คว่ามีช่องกรอกรหัสไหม
-        const hasLoginInput = await page.$('#txtname');
-        if (!hasLoginInput) {
-            console.error('❌ Login input not found! Maybe blocked?');
-            throw new Error(`Login input missing. Page title: ${pageTitle}`);
-        }
+        // รอให้เห็นช่อง User ชัวร์ๆ
+        await page.waitForSelector('#txtname', { visible: true, timeout: 60000 });
 
         // ---------------------------------------------------------
-        // Step 2: Login
+        // Step 2: Login (Force Mode)
         // ---------------------------------------------------------
-        console.log('🔐 Step 2: Logging in...');
+        console.log('🔐 Step 2: Attempting Login...');
         
-        await page.type('#txtname', DTC_USER, { delay: 100 }); // พิมพ์ช้าๆ
+        // พิมพ์รหัส (พิมพ์ช้าๆ ให้ชัวร์)
+        await page.type('#txtname', DTC_USER, { delay: 100 });
         await page.type('#txtpass', DTC_PASS, { delay: 100 });
+
+        // ถ่ายรูปก่อนกด เพื่อเช็คว่าพิมพ์ถูกไหม
+        await page.screenshot({ path: path.join(downloadPath, 'debug_before_click.png') });
+
+        console.log('👉 Clicking Login (JS Trigger)...');
         
-        await page.screenshot({ path: path.join(downloadPath, '2_filled_login.png') });
+        // 🔴 เทคนิคแก้: ใช้ JS กดปุ่มแทนการคลิกเมาส์ (ชัวร์กว่า 100%)
+        await page.evaluate(() => {
+            const loginBtn = document.getElementById('btnLogin');
+            if(loginBtn) {
+                loginBtn.click(); // กดแบบ JS
+            } else {
+                // ถ้าหา ID ไม่เจอ ลองหาจาก Form
+                document.forms[0].submit(); // สั่งส่งฟอร์มดื้อๆ เลย
+            }
+        });
 
-        console.log('👉 Clicking Login...');
-        await Promise.all([
-            page.waitForNavigation({ waitUntil: 'domcontentloaded' }).catch(e => console.log('Navigation timeout ignored')),
-            page.click('#btnLogin')
-        ]);
-
-        // ตรวจสอบผลลัพธ์
-        await new Promise(r => setTimeout(r, 5000)); // รอ 5 วิ
-        await page.screenshot({ path: path.join(downloadPath, '3_after_login.png') });
-
-        if (await page.$('#txtname')) {
-             console.error('⚠️ Still on login page. Credentials might be wrong or blocked.');
-             throw new Error('Login Failed: Still seeing login inputs');
+        console.log('⏳ Waiting for redirection...');
+        
+        // 🔴 เทคนิคแก้: ไม่รอ Navigation แต่รอให้ "ช่อง User หายไป"
+        try {
+            await page.waitForFunction(() => !document.querySelector('#txtname'), { timeout: 20000 });
+            console.log('✅ Login Success: Login form disappeared.');
+        } catch (e) {
+            console.log('⚠️ Login might be stuck. Checking URL...');
+            // ถ้า timeout ลองเช็ค URL ว่าเปลี่ยนไหม
+            if (page.url().includes('index.php')) {
+                console.error('❌ Login Failed: Still on login page.');
+                await page.screenshot({ path: path.join(downloadPath, 'error_login_stuck.png') });
+                
+                // ลองกดซ้ำอีกที (Last Resort)
+                console.log('🔄 Retrying click...');
+                await page.click('#btnLogin');
+                await new Promise(r => setTimeout(r, 5000));
+            }
         }
-        console.log('✅ Login Passed (Input disappeared)');
+
+        // รอแถม 5 วินาที
+        await new Promise(r => setTimeout(r, 5000));
 
         // ---------------------------------------------------------
-        // Step 3: Go to Report
+        // Step 3: Force Navigate to Report
         // ---------------------------------------------------------
-        console.log('📄 Step 3: Go to Report Page...');
+        console.log('📄 Step 3: Going to Report Page...');
+        // ไม่สนว่า Login ผ่านไหม สั่งกระโดดไปหน้ารายงานเลย ถ้า Login ติด session จะทำงานเอง
         await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'domcontentloaded' });
+
+        // เช็คว่าเด้งกลับมาหน้า Login ไหม
+        const isLoginPage = await page.$('#txtname');
+        if (isLoginPage) {
+            // ถ้ายังเจอช่อง User แปลว่า Login ไม่เข้าจริงๆ
+            await page.screenshot({ path: path.join(downloadPath, 'fatal_login_failed.png') });
+            throw new Error('❌ FATAL: Cannot bypass login page. Please check Username/Password.');
+        }
+
+        // ---------------------------------------------------------
+        // Step 4: Fill Form & Export
+        // ---------------------------------------------------------
+        console.log('📝 Step 4: Fill & Export');
         
-        // --- Step 4: Fill Form ---
-        console.log('📝 Step 4: Filling Form...');
         await page.waitForSelector('#speed_max', { visible: true, timeout: 60000 });
         
+        // Direct Inject Value
         await page.evaluate(() => {
             document.getElementById('speed_max').value = '55';
             
-            // Date Logic (UI.Vision Formula)
+            // Date Logic
             var d = new Date(); d.setDate(1); d.setDate(d.getDate() - 2); 
             var y = d.getFullYear(); var m = d.getMonth() + 1; var day = d.getDate(); 
             var start = y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day + ' 00:00';
@@ -140,38 +145,39 @@ const EMAIL_TO = process.env.EMAIL_TO;
             document.getElementById('date9').value = start;
             document.getElementById('date10').value = end;
             
+            // Trigger Change
+            document.getElementById('date9').dispatchEvent(new Event('change'));
+            document.getElementById('date10').dispatchEvent(new Event('change'));
+
             document.getElementById('ddlMinute').value = '1';
             
-            // Select Truck
+            // Truck Select
             const sel = document.getElementById('ddl_truck');
             for(let o of sel.options) {
-                if(o.text.includes('ทั้งหมด')) { sel.value = o.value; break; }
+                if(o.text.includes('ทั้งหมด')) { 
+                    sel.value = o.value; 
+                    sel.dispatchEvent(new Event('change', { bubbles: true }));
+                    break; 
+                }
             }
         });
 
-        // --- Step 5: Search & Export ---
-        console.log('🔍 Step 5: Search & Export...');
-        
-        // กดค้นหา
+        // Search
+        console.log('🔍 Clicking Search...');
         await page.evaluate(() => {
             if(typeof sertch_data === 'function') sertch_data();
             else document.querySelector("span[onclick='sertch_data();']").click();
         });
 
-        // รอ Export
+        // Wait Export
         console.log('⏳ Waiting for Export button...');
-        try {
-            await page.waitForSelector('#btnexport', { visible: true, timeout: 120000 });
-        } catch(e) {
-            await page.screenshot({ path: path.join(downloadPath, 'error_no_export.png') });
-            throw new Error('Export button not found');
-        }
+        await page.waitForSelector('#btnexport', { visible: true, timeout: 120000 });
 
-        // กด Export
+        // Export
         console.log('⬇️ Clicking Export...');
         await page.click('#btnexport');
 
-        // รอไฟล์
+        // Download Check
         console.log('⏳ Downloading...');
         let foundFile;
         for(let i=0; i<180; i++) {
@@ -185,7 +191,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log(`✅ File: ${foundFile}`);
         await browser.close();
 
-        // --- Send Email ---
+        // Send Email
         console.log('📧 Sending Email...');
         const transporter = nodemailer.createTransport({
             service: 'gmail',
@@ -196,7 +202,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
             from: `"DTC Bot" <${EMAIL_USER}>`,
             to: EMAIL_TO,
             subject: `รายงาน DTC Report - ${new Date().toLocaleDateString()}`,
-            text: `รายงานประจำวันที่ท่านต้องการครับ`,
+            text: `ระบบ Login สำเร็จและดึงรายงานแล้วครับ`,
             attachments: [{ filename: foundFile, path: path.join(downloadPath, foundFile) }]
         });
 
