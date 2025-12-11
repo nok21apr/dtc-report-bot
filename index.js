@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (UI.Vision Exact Timing Mode)...');
+    console.log('🚀 Starting Bot (Patient Mode)...');
 
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
         console.error('❌ Error: Secrets incomplete.');
@@ -40,17 +40,21 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         page = await browser.newPage();
         
-        // Timeout รวมยาวๆ 15 นาที (เผื่อรอทุก step)
+        // Timeout รวม 15 นาที (เผื่อรอนานมาก)
         page.setDefaultNavigationTimeout(900000);
         page.setDefaultTimeout(900000);
 
         await page.emulateTimezone('Asia/Bangkok');
 
-        const client = await page.target().createCDPSession();
-        await client.send('Page.setDownloadBehavior', {
-            behavior: 'allow',
-            downloadPath: downloadPath,
-        });
+        // ฟังก์ชันตั้งค่า Download
+        const setupDownload = async () => {
+            const client = await page.target().createCDPSession();
+            await client.send('Page.setDownloadBehavior', {
+                behavior: 'allow',
+                downloadPath: downloadPath,
+            });
+        };
+        await setupDownload();
 
         // ---------------------------------------------------------
         // Step 1: Login
@@ -100,7 +104,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
             // Trigger Change
             document.getElementById('date9').dispatchEvent(new Event('change'));
             document.getElementById('date10').dispatchEvent(new Event('change'));
-            sel.dispatchEvent(new Event('change'));
+            sel.dispatchEvent(new Event('change', { bubbles: true }));
         });
 
         // ---------------------------------------------------------
@@ -113,54 +117,70 @@ const EMAIL_TO = process.env.EMAIL_TO;
         });
 
         // ---------------------------------------------------------
-        // Step 5: Wait 120s (ตาม UI.Vision เป๊ะๆ)
+        // Step 5: Wait 120s (รอข้อมูลตารางโหลด)
         // ---------------------------------------------------------
-        console.log('⏳ Step 5: Waiting 120s for Data Processing (UI.Vision Pause)...');
-        
-        // รอให้ปุ่ม Export โผล่ก่อน
+        console.log('⏳ Step 5: Waiting 120s for Table Data...');
         await page.waitForSelector('#btnexport', { visible: true, timeout: 300000 });
-        
-        // 🔴 จุดสำคัญ: บังคับรอ 120 วินาที (2 นาที) เพื่อให้ตารางโหลดเสร็จสมบูรณ์
-        // นี่คือสิ่งที่ UI.Vision ทำในคำสั่ง "pause | 120000"
+        // บังคับรอ 120 วินาที
         await new Promise(r => setTimeout(r, 120000));
-        
-        console.log('✅ 120s Wait Complete. Data should be ready.');
+        console.log('✅ Table Data Ready.');
 
         // ---------------------------------------------------------
-        // Step 6: Export & Download
+        // Step 6: Export & Download (รอไฟล์สร้าง 120s)
         // ---------------------------------------------------------
         console.log('⬇️ Step 6: Clicking Export...');
         
+        // ย้ำสิทธิ์ดาวน์โหลดอีกที
+        await setupDownload();
+
         // กดปุ่ม Export
         await page.evaluate(() => document.getElementById('btnexport').click());
+
+        console.log('⏳ Step 6: Waiting 120s for File Generation (Server Processing)...');
+        // 🔴 บังคับรออีก 120 วินาที ให้ Server สร้างไฟล์ Excel ก่อน
+        await new Promise(r => setTimeout(r, 120000));
         
-        console.log('⏳ Waiting for file download (Max 5 mins)...');
+        console.log('👀 Checking for file...');
+        
         let fileDownloaded = false;
-        
-        // รอไฟล์เข้าสูงสุด 5 นาที (300 วินาที)
-        for (let i = 0; i < 300; i++) {
+        // ให้เวลาเพิ่มอีก 3 นาที สำหรับการดาวน์โหลดจริง (เผื่อเน็ตช้า)
+        for (let i = 0; i < 180; i++) {
             await new Promise(r => setTimeout(r, 1000));
             const files = fs.readdirSync(downloadPath);
-            // หาไฟล์ .xlsx ที่ไม่ใช่ไฟล์ชั่วคราว (.crdownload)
+            // หาไฟล์ .xlsx ที่ไม่ใช่ .crdownload
             if (files.some(f => (f.endsWith('.xlsx') || f.endsWith('.xls')) && !f.endsWith('.crdownload'))) {
                 fileDownloaded = true;
                 break;
             }
-            
-            // Log ทุก 30 วินาทีเพื่อให้รู้ว่ายังทำงานอยู่
-            if (i % 30 === 0) console.log(`   ...waiting ${i}s`);
+            if (i % 30 === 0) console.log(`   ...downloading ${i}s`);
         }
 
         if (!fileDownloaded) {
-            await page.screenshot({ path: path.join(downloadPath, 'error_download_timeout.png') });
-            throw new Error('❌ Download Timeout: File did not arrive within 5 minutes.');
+            // ถ้ายังไม่มา ลองกดซ้ำอีกที (เผื่อรอบแรกกดวืด)
+            console.warn('⚠️ File not found. Retrying click...');
+            await page.evaluate(() => document.getElementById('btnexport').click());
+            
+            // รออีก 2 นาที
+            for (let i = 0; i < 120; i++) {
+                await new Promise(r => setTimeout(r, 1000));
+                const files = fs.readdirSync(downloadPath);
+                if (files.some(f => (f.endsWith('.xlsx') || f.endsWith('.xls')) && !f.endsWith('.crdownload'))) {
+                    fileDownloaded = true;
+                    break;
+                }
+            }
+        }
+
+        if (!fileDownloaded) {
+            await page.screenshot({ path: path.join(downloadPath, 'error_step6_timeout.png') });
+            throw new Error('❌ Step 6 Failed: File did not download after wait.');
         }
 
         const finalFile = fs.readdirSync(downloadPath).find(f => (f.endsWith('.xlsx') || f.endsWith('.xls')) && !f.endsWith('.crdownload'));
         console.log(`✅ File Downloaded: ${finalFile}`);
         
-        // รออีกนิดเพื่อให้ไฟล์เขียนเสร็จสมบูรณ์ 100%
-        await new Promise(r => setTimeout(r, 5000)); 
+        // รอให้ไฟล์เขียนเสร็จสมบูรณ์
+        await new Promise(r => setTimeout(r, 5000));
         
         await browser.close();
 
