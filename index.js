@@ -10,10 +10,22 @@ const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
-(async () => {
-    console.log('🚀 Starting Bot (High Precision Mode)...');
+// ฟังก์ชันช่วยตื๊อ (Retry Helper)
+async function retryOperation(operation, maxRetries, delay, opName) {
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            return await operation();
+        } catch (error) {
+            console.warn(`⚠️ ${opName} failed (Attempt ${i + 1}/${maxRetries}): ${error.message}`);
+            if (i === maxRetries - 1) throw error;
+            await new Promise(r => setTimeout(r, delay));
+        }
+    }
+}
 
-    // ตรวจสอบตัวแปร
+(async () => {
+    console.log('🚀 Starting Bot (Auto-Retry Mode)...');
+
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
         console.error('❌ Error: Secrets incomplete.');
         process.exit(1);
@@ -34,7 +46,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
-                '--disable-accelerated-2d-canvas', // ปิดกราฟิก
+                '--disable-accelerated-2d-canvas',
                 '--window-size=1920,1080',
                 '--lang=th-TH,th'
             ]
@@ -42,14 +54,12 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         page = await browser.newPage();
         
-        // Timeout 5 นาที
-        page.setDefaultNavigationTimeout(300000);
-        page.setDefaultTimeout(300000);
+        // Timeout สั้นลง เพื่อให้ Fail เร็วแล้ว Retry (60 วินาที)
+        page.setDefaultNavigationTimeout(60000);
+        page.setDefaultTimeout(60000);
 
-        // ตั้งค่า Timezone เป็นไทย
         await page.emulateTimezone('Asia/Bangkok');
 
-        // ตั้งค่า Download
         const client = await page.target().createCDPSession();
         await client.send('Page.setDownloadBehavior', {
             behavior: 'allow',
@@ -57,79 +67,65 @@ const EMAIL_TO = process.env.EMAIL_TO;
         });
 
         // ---------------------------------------------------------
-        // Step 1: Login Process (ปรับปรุงใหม่)
+        // Step 1: Login (with Retry)
         // ---------------------------------------------------------
-        console.log('🔐 Step 1: Login Process');
-        await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'domcontentloaded' });
-
-        // รอช่องกรอกรหัสมา
-        await page.waitForSelector('#txtname', { visible: true, timeout: 60000 });
-        
-        // ฟังก์ชันช่วย Login
-        const performLogin = async () => {
+        await retryOperation(async () => {
+            console.log('🔐 Step 1: Accessing Login Page...');
+            await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'domcontentloaded' });
+            
+            console.log('   Waiting for login form...');
+            await page.waitForSelector('#txtname', { visible: true, timeout: 30000 }); // รอแค่ 30 วิพอ
+            
             console.log('   Typing credentials...');
-            // Clear ค่าเก่าก่อน (กันพลาด)
+            // Clear & Type
             await page.evaluate(() => {
                 document.querySelector('#txtname').value = '';
                 document.querySelector('#txtpass').value = '';
             });
-            await page.type('#txtname', DTC_USER, { delay: 50 });
-            await page.type('#txtpass', DTC_PASS, { delay: 50 });
+            await page.type('#txtname', DTC_USER);
+            await page.type('#txtpass', DTC_PASS);
             
             console.log('   Clicking Login...');
-            await page.click('#btnLogin');
-        };
+            await Promise.all([
+                page.waitForNavigation({ waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => console.log('   Navigation timeout ignored')),
+                page.click('#btnLogin')
+            ]);
 
-        await performLogin();
-
-        // ตรวจสอบว่า Login ผ่านไหม (รอหน้า Dashboard หรือ Element ที่มีเฉพาะตอน Login แล้ว)
-        try {
-            console.log('   Verifying login success...');
-            // รอให้ช่อง Login หายไป เป็นสัญญาณว่าเข้าได้แล้ว
-            await page.waitForFunction(() => !document.querySelector('#txtname'), { timeout: 20000 });
+            // Check Success
+            console.log('   Verifying login...');
+            // ถ้ารหัสผู้ใช้หายไป แปลว่า Login ผ่าน
+            await page.waitForFunction(() => !document.querySelector('#txtname'), { timeout: 10000 });
             console.log('✅ Login Verified!');
-        } catch (e) {
-            console.warn('⚠️ Login might have failed, retrying once...');
-            await page.reload({ waitUntil: 'domcontentloaded' });
-            await page.waitForSelector('#txtname', { visible: true });
-            await performLogin();
-            // รออีกรอบ
-            await page.waitForFunction(() => !document.querySelector('#txtname'), { timeout: 20000 });
-        }
-
-        // รอสักพักให้ Session นิ่ง
-        await new Promise(r => setTimeout(r, 5000));
+        }, 3, 5000, "Login Process"); // ลอง 3 ครั้ง พักครั้งละ 5 วิ
 
         // ---------------------------------------------------------
-        // Step 2: Go to Report Page
+        // Step 2: Report Page (with Retry)
         // ---------------------------------------------------------
-        console.log('📄 Step 2: Navigate to Report Page');
-        await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'domcontentloaded' });
-        
-        // เช็คว่าเด้งกลับมาหน้า Login ไหม
-        if (await page.$('#txtname')) {
-            throw new Error('❌ Session Lost: Redirected back to login page.');
-        }
+        await retryOperation(async () => {
+            console.log('📄 Step 2: Navigate to Report Page...');
+            await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'domcontentloaded' });
+            
+            // เช็คว่าหลุด Login ไหม
+            if (await page.$('#txtname')) {
+                throw new Error('Session lost, redirected to login page');
+            }
+            // เช็คว่าฟอร์มมาไหม
+            await page.waitForSelector('#speed_max', { visible: true, timeout: 30000 });
+        }, 3, 3000, "Navigate Report");
 
         // ---------------------------------------------------------
-        // Step 3: Fill Form (Direct Injection)
+        // Step 3: Fill Form
         // ---------------------------------------------------------
         console.log('📝 Step 3: Fill Report Form');
         
-        // 3.1 Speed Max
-        await page.waitForSelector('#speed_max', { visible: true });
+        // Direct Inject (เสถียรสุด)
         await page.evaluate(() => {
-            const el = document.getElementById('speed_max');
-            el.value = '55';
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-            el.dispatchEvent(new Event('blur')); // สำคัญ: เพื่อให้เว็บ Save ค่า
-        });
+            // Speed
+            const speed = document.getElementById('speed_max');
+            speed.value = '55';
+            speed.dispatchEvent(new Event('input', { bubbles: true }));
 
-        // 3.2 Calculate Dates (Timezone Thai)
-        console.log('   Calculating dates...');
-        const dateResult = await page.evaluate(() => {
-            // สูตรจาก UI.Vision
+            // Date Calculation
             var d = new Date(); 
             d.setDate(1); 
             d.setDate(d.getDate() - 2); 
@@ -144,122 +140,93 @@ const EMAIL_TO = process.env.EMAIL_TO;
             var lastDay = new Date(y2, m2, 0).getDate(); 
             var endDate = y2 + '-' + (m2 < 10 ? '0' : '') + m2 + '-' + (lastDay < 10 ? '0' : '') + lastDay + ' 23:59';
 
-            return { start: startDate, end: endDate };
-        });
-        console.log(`   Date Range: ${dateResult.start} to ${dateResult.end}`);
-
-        // 3.3 Set Dates
-        await page.evaluate((dates) => {
+            // Set Dates
             const d9 = document.getElementById('date9');
             const d10 = document.getElementById('date10');
+            d9.value = startDate;
+            d10.value = endDate;
             
-            d9.value = dates.start;
-            d10.value = dates.end;
-            
-            // Trigger ทุก event ที่เป็นไปได้เพื่อให้เว็บรู้ตัว
+            // Trigger Events
             [d9, d10].forEach(el => {
-                el.dispatchEvent(new Event('focus'));
-                el.dispatchEvent(new Event('input', { bubbles: true }));
                 el.dispatchEvent(new Event('change', { bubbles: true }));
                 el.dispatchEvent(new Event('blur'));
             });
-        }, dateResult);
 
-        // 3.4 Select Options
-        await page.select('#ddlMinute', '1');
-        await page.evaluate(() => {
-            const sel = document.getElementById('ddl_truck');
-            for (let opt of sel.options) {
+            // Select Options
+            const ddlMinute = document.getElementById('ddlMinute');
+            ddlMinute.value = '1';
+            
+            const ddlTruck = document.getElementById('ddl_truck');
+            for (let opt of ddlTruck.options) {
                 if (opt.text.includes('ทั้งหมด')) {
-                    sel.value = opt.value;
-                    sel.dispatchEvent(new Event('change', { bubbles: true }));
+                    ddlTruck.value = opt.value;
+                    ddlTruck.dispatchEvent(new Event('change', { bubbles: true }));
                     break;
                 }
             }
         });
 
         // ---------------------------------------------------------
-        // Step 4: Search & Export
+        // Step 4: Search & Export (with Retry)
         // ---------------------------------------------------------
-        console.log('🔍 Step 4: Search Data');
-        
-        // กดปุ่มค้นหาผ่าน JS โดยตรง (เลี่ยงปัญหา Element ถูกบัง)
-        await page.evaluate(() => {
-            if (typeof sertch_data === 'function') {
-                sertch_data();
-            } else {
-                document.querySelector("span[onclick='sertch_data();']").click();
-            }
-        });
+        console.log('🔍 Step 4: Search & Export');
 
-        console.log('⏳ Waiting for Export button...');
-        // รอสูงสุด 3 นาที
-        try {
-            await page.waitForSelector('#btnexport', { visible: true, timeout: 180000 });
-            console.log('✅ Export button appeared!');
-        } catch (e) {
-            await page.screenshot({ path: path.join(downloadPath, 'error_no_export.png') });
-            throw new Error('❌ Export button not found (Timeout). Data might be empty.');
-        }
+        await retryOperation(async () => {
+            console.log('   Clicking Search...');
+            await page.evaluate(() => {
+                if (typeof sertch_data === 'function') sertch_data();
+                else document.querySelector("span[onclick='sertch_data();']").click();
+            });
 
-        // รอแถม 5 วินาที เผื่อ Loading overlay ยังอยู่
-        await new Promise(r => setTimeout(r, 5000));
-
-        console.log('⬇️ Step 5: Clicking Export');
-        
-        // ดักจับ response เพื่อดูว่ากดแล้วเว็บตอบสนองไหม (Optional Debug)
-        const clickExport = async () => {
-            // ลองกดแบบ Element Click
-            try {
-                await page.click('#btnexport');
-            } catch (e) {
-                // ถ้ากดไม่ได้ ให้กดแบบ JS
-                await page.evaluate(() => document.getElementById('btnexport').click());
-            }
-        };
-
-        await clickExport();
+            console.log('   Waiting for Export button...');
+            await page.waitForSelector('#btnexport', { visible: true, timeout: 60000 });
+            
+            console.log('   Clicking Export...');
+            // กดปุ่ม Export
+            await page.click('#btnexport');
+            
+            // รอไฟล์เริ่มโหลด (เช็คว่ามีไฟล์งอกมาไหมภายใน 10 วิ)
+            console.log('   Checking download start...');
+            await new Promise((resolve, reject) => {
+                let checkCount = 0;
+                const interval = setInterval(() => {
+                    checkCount++;
+                    const files = fs.readdirSync(downloadPath);
+                    if (files.some(f => f.endsWith('.xlsx') || f.endsWith('.xls'))) {
+                        clearInterval(interval);
+                        resolve();
+                    }
+                    if (checkCount > 10) { // 10 วินาที
+                        clearInterval(interval);
+                        reject(new Error("Download didn't start in 10s"));
+                    }
+                }, 1000);
+            });
+        }, 3, 5000, "Search & Export");
 
         // ---------------------------------------------------------
-        // Step 6: Verify Download
+        // Step 5: Verify Download Completion
         // ---------------------------------------------------------
-        console.log('⏳ Step 6: Waiting for file...');
-        
+        console.log('⏳ Step 5: Finalizing Download...');
         let foundFile = null;
-        // รอ 30 วินาทีแรก
-        for (let i = 0; i < 30; i++) {
+        // รอไฟล์โหลดเสร็จ (ขนาดไฟล์หยุดนิ่ง หรือ นามสกุลถูกต้อง)
+        for (let i = 0; i < 60; i++) {
             await new Promise(r => setTimeout(r, 1000));
             const files = fs.readdirSync(downloadPath);
             foundFile = files.find(f => f.endsWith('.xlsx') || f.endsWith('.xls'));
-            if (foundFile) break;
+            // ถ้าเจอไฟล์แล้ว และไม่มีไฟล์ .crdownload (กำลังโหลด) ก็ถือว่าเสร็จ
+            if (foundFile && !files.some(f => f.endsWith('.crdownload'))) break;
         }
 
-        // ถ้ายังไม่มา ลองกดซ้ำ (Re-click strategy)
-        if (!foundFile) {
-            console.warn('⚠️ File not started, clicking Export AGAIN...');
-            await clickExport();
-            
-            // รอยาวๆ 4 นาที
-            for (let i = 0; i < 240; i++) {
-                await new Promise(r => setTimeout(r, 1000));
-                const files = fs.readdirSync(downloadPath);
-                foundFile = files.find(f => f.endsWith('.xlsx') || f.endsWith('.xls'));
-                if (foundFile) break;
-            }
-        }
+        if (!foundFile) throw new Error('File download failed');
 
-        if (!foundFile) {
-            await page.screenshot({ path: path.join(downloadPath, 'error_download_timeout.png') });
-            throw new Error('❌ File download timed out.');
-        }
-
-        console.log(`✅ File Downloaded: ${foundFile}`);
+        console.log(`✅ Downloaded: ${foundFile}`);
         await browser.close();
 
         // ---------------------------------------------------------
-        // Step 7: Send Email
+        // Step 6: Send Email
         // ---------------------------------------------------------
-        console.log('📧 Step 7: Sending Email...');
+        console.log('📧 Step 6: Sending Email...');
         const transporter = nodemailer.createTransport({
             service: 'gmail',
             auth: { user: EMAIL_USER, pass: EMAIL_PASS }
@@ -278,9 +245,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
     } catch (error) {
         console.error('❌ FATAL ERROR:', error);
         if (page && !page.isClosed()) {
-            try {
-                await page.screenshot({ path: path.join(downloadPath, 'fatal_error.png') });
-            } catch (e) {}
+            try { await page.screenshot({ path: path.join(downloadPath, 'fatal_error.png') }); } catch (e) {}
         }
         if (browser) await browser.close();
         process.exit(1);
