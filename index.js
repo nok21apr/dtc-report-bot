@@ -78,7 +78,7 @@ async function retryOperation(operation, maxRetries, delay, opName) {
             console.log('🌐 Loading Login Page...');
             await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'domcontentloaded', timeout: 60000 });
             
-            await page.waitForSelector('#txtname', { visible: true, timeout: 60000 });
+            await page.waitForSelector('#txtname', { visible: true, timeout: 120000 });
             
             console.log('🔐 Filling Credentials...');
             await page.evaluate(() => {
@@ -93,7 +93,7 @@ async function retryOperation(operation, maxRetries, delay, opName) {
             await Promise.all([
                 page.click('#btnLogin'),
                 // เพิ่มเวลารอตรวจสอบผลเป็น 60 วินาที (จากเดิม 10-30 วิ) เผื่อเว็บช้า
-                page.waitForFunction(() => !document.querySelector('#txtname'), { timeout: 60000 })
+                page.waitForFunction(() => !document.querySelector('#txtname'), { timeout: 120000 })
             ]);
             console.log('✅ Login Success');
         }, 3, 10000, "Login Step");
@@ -105,7 +105,7 @@ async function retryOperation(operation, maxRetries, delay, opName) {
             console.log('📄 Navigating to Report...');
             await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'domcontentloaded', timeout: 60000 });
             
-            await page.waitForSelector('#speed_max', { visible: true, timeout: 60000 });
+            await page.waitForSelector('#speed_max', { visible: true, timeout: 120000 });
             
             console.log('📝 Filling Form...');
             await page.evaluate(() => {
