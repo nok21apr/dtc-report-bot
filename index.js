@@ -10,8 +10,27 @@ const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
+// ฟังก์ชัน Retry (หัวใจสำคัญของความเสถียร)
+async function retryOperation(operation, maxRetries, delay, opName) {
+    let lastError;
+    for (let i = 0; i < maxRetries; i++) {
+        try {
+            console.log(`🔄 Attempt ${i + 1}/${maxRetries}: ${opName}`);
+            return await operation();
+        } catch (error) {
+            console.warn(`⚠️ ${opName} failed: ${error.message}`);
+            lastError = error;
+            if (i < maxRetries - 1) {
+                console.log(`⏳ Waiting ${delay/1000}s before retry...`);
+                await new Promise(r => setTimeout(r, delay));
+            }
+        }
+    }
+    throw lastError;
+}
+
 (async () => {
-    console.log('🚀 Starting Bot (Final Robust Version)...');
+    console.log('🚀 Starting Bot (Ultimate Resilience Mode)...');
 
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
         console.error('❌ Error: Secrets incomplete.');
@@ -19,19 +38,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
     }
 
     const downloadPath = path.join(__dirname, 'downloads');
-    // ล้างไฟล์เก่าและสร้างโฟลเดอร์ใหม่
-    if (fs.existsSync(downloadPath)) {
-        fs.rmSync(downloadPath, { recursive: true, force: true });
-    }
+    if (fs.existsSync(downloadPath)) fs.rmSync(downloadPath, { recursive: true, force: true });
     fs.mkdirSync(downloadPath);
-
-    // ทดสอบเขียนไฟล์เพื่อยืนยันว่า Save ได้แน่นอน
-    try {
-        fs.writeFileSync(path.join(downloadPath, 'permission_check.txt'), 'Write OK');
-        console.log('✅ Storage Permission Check: Passed');
-    } catch (e) {
-        throw new Error('❌ Storage Permission Failed: Cannot write to server disk.');
-    }
 
     let browser = null;
     let page = null;
@@ -51,157 +59,129 @@ const EMAIL_TO = process.env.EMAIL_TO;
         });
 
         page = await browser.newPage();
-        
-        // Timeout รวม 20 นาที (ให้เวลานานที่สุด)
-        page.setDefaultNavigationTimeout(1200000);
-        page.setDefaultTimeout(1200000);
+        // เพิ่ม Timeout เป็น 30 นาที (เผื่อ Retry หลายรอบ)
+        page.setDefaultNavigationTimeout(1800000);
+        page.setDefaultTimeout(1800000);
 
         await page.emulateTimezone('Asia/Bangkok');
-
         const client = await page.target().createCDPSession();
-        await client.send('Page.setDownloadBehavior', {
-            behavior: 'allow',
-            downloadPath: downloadPath,
-        });
+        await client.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: downloadPath });
 
         // ---------------------------------------------------------
-        // Step 1: Login
+        // Step 1: Login with Smart Retry
         // ---------------------------------------------------------
-        console.log('🌐 Step 1: Login...');
-        await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'domcontentloaded' });
-        
-        try {
+        await retryOperation(async () => {
+            console.log('🌐 Loading Login Page...');
+            // ลองเข้าเว็บ (ถ้าครั้งแรกพัง จะ Retry)
+            await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'domcontentloaded', timeout: 60000 });
+            
+            // รอให้ช่อง User มาจริงๆ
             await page.waitForSelector('#txtname', { visible: true, timeout: 30000 });
+            
+            console.log('🔐 Filling Credentials...');
+            await page.evaluate(() => {
+                document.querySelector('#txtname').value = '';
+                document.querySelector('#txtpass').value = '';
+            });
             await page.type('#txtname', DTC_USER);
             await page.type('#txtpass', DTC_PASS);
-            await page.click('#btnLogin');
-            await page.waitForFunction(() => !document.querySelector('#txtname'), { timeout: 30000 });
+            
+            console.log('👉 Clicking Login...');
+            await Promise.all([
+                // รอหน้าเปลี่ยน หรือ รอให้ปุ่ม Login หายไป
+                page.evaluate(() => document.getElementById('btnLogin').click()),
+                page.waitForFunction(() => !document.querySelector('#txtname'), { timeout: 30000 })
+            ]);
             console.log('✅ Login Success');
-        } catch (e) {
-            console.log('⚠️ Login skipped (Session active or Element missing)');
-        }
+        }, 3, 10000, "Login Step"); // ลอง 3 ครั้ง พัก 10 วิ
 
         // ---------------------------------------------------------
-        // Step 2-4: Navigate & Search
+        // Step 2-4: Navigate & Fill Form
         // ---------------------------------------------------------
-        console.log('📄 Step 2-4: Navigate & Search...');
-        await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'domcontentloaded' });
-        
-        await page.waitForSelector('#speed_max', { visible: true, timeout: 60000 });
-        
-        await page.evaluate(() => {
-            document.getElementById('speed_max').value = '55';
+        await retryOperation(async () => {
+            console.log('📄 Navigating to Report...');
+            await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'domcontentloaded', timeout: 60000 });
             
-            // สูตรวันที่ (ตาม UI.Vision)
-            var d = new Date(); d.setDate(1); d.setDate(d.getDate() - 2); 
-            var y = d.getFullYear(); var m = d.getMonth() + 1; var day = d.getDate(); 
-            var start = y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day + ' 00:00';
-
-            var d2 = new Date(); var y2 = d2.getFullYear(); var m2 = d2.getMonth() + 1; 
-            var last = new Date(y2, m2, 0).getDate(); 
-            var end = y2 + '-' + (m2 < 10 ? '0' : '') + m2 + '-' + (last < 10 ? '0' : '') + last + ' 23:59';
-
-            document.getElementById('date9').value = start;
-            document.getElementById('date10').value = end;
+            await page.waitForSelector('#speed_max', { visible: true, timeout: 30000 });
             
-            // Trigger Events
-            document.getElementById('date9').dispatchEvent(new Event('change'));
-            document.getElementById('date10').dispatchEvent(new Event('change'));
+            console.log('📝 Filling Form...');
+            await page.evaluate(() => {
+                document.getElementById('speed_max').value = '55';
+                
+                var d = new Date(); d.setDate(1); d.setDate(d.getDate() - 2); 
+                var y = d.getFullYear(); var m = d.getMonth() + 1; var day = d.getDate(); 
+                var start = y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day + ' 00:00';
 
-            document.getElementById('ddlMinute').value = '1';
-            
-            const sel = document.getElementById('ddl_truck');
-            for(let o of sel.options) {
-                if(o.text.includes('ทั้งหมด')) { 
-                    sel.value = o.value; 
-                    sel.dispatchEvent(new Event('change', { bubbles: true }));
-                    break; 
+                var d2 = new Date(); var y2 = d2.getFullYear(); var m2 = d2.getMonth() + 1; 
+                var last = new Date(y2, m2, 0).getDate(); 
+                var end = y2 + '-' + (m2 < 10 ? '0' : '') + m2 + '-' + (last < 10 ? '0' : '') + last + ' 23:59';
+
+                document.getElementById('date9').value = start;
+                document.getElementById('date10').value = end;
+                document.getElementById('ddlMinute').value = '1';
+                
+                const sel = document.getElementById('ddl_truck');
+                for(let o of sel.options) {
+                    if(o.text.includes('ทั้งหมด')) { sel.value = o.value; break; }
                 }
-            }
-        });
+                
+                // Trigger Events
+                document.getElementById('date9').dispatchEvent(new Event('change'));
+                document.getElementById('date10').dispatchEvent(new Event('change'));
+                sel.dispatchEvent(new Event('change', { bubbles: true }));
+            });
 
-        // กดค้นหา
-        console.log('🔍 Searching...');
-        await page.evaluate(() => {
-            if(typeof sertch_data === 'function') sertch_data();
-            else document.querySelector("span[onclick='sertch_data();']").click();
-        });
+            console.log('🔍 Clicking Search...');
+            await page.evaluate(() => {
+                if(typeof sertch_data === 'function') sertch_data();
+                else document.querySelector("span[onclick='sertch_data();']").click();
+            });
+        }, 3, 5000, "Navigate & Fill Form");
 
         // ---------------------------------------------------------
-        // Step 5: Wait 120s (Data Loading)
+        // Step 5: Wait Data (120s)
         // ---------------------------------------------------------
-        console.log('⏳ Step 5: Waiting 120s for Table Data...');
+        console.log('⏳ Waiting 120s for Data (Mandatory)...');
         await page.waitForSelector('#btnexport', { visible: true, timeout: 300000 });
-        
-        // บังคับรอ 120 วินาที เพื่อให้ข้อมูลครบ (เหมือน UI.Vision)
         await new Promise(r => setTimeout(r, 120000));
-        console.log('✅ Table Data Ready.');
+        console.log('✅ Data Ready.');
 
         // ---------------------------------------------------------
-        // Step 6: Export (แก้ไขใหม่: รอไฟล์สร้างอย่างใจเย็น)
+        // Step 6: Export (Retry Logic)
         // ---------------------------------------------------------
-        console.log('⬇️ Step 6: Exporting...');
-        
-        let fileFound = null;
-        
-        // กดปุ่มครั้งแรก
-        console.log('   👉 Clicking Export Button...');
-        await page.evaluate(() => document.getElementById('btnexport').click());
-
-        // รอไฟล์รอบแรก 180 วินาที (3 นาที) โดยไม่กดซ้ำ
-        console.log('   ⏳ Waiting 180s for file generation...');
-        for (let i = 0; i < 180; i++) {
-            await new Promise(r => setTimeout(r, 1000));
-            const files = fs.readdirSync(downloadPath);
-            // เช็คว่ามีไฟล์ .xlsx ที่ไม่ใช่ไฟล์ขยะ
-            const target = files.find(f => (f.endsWith('.xlsx') || f.endsWith('.xls')) && !f.endsWith('.crdownload'));
+        await retryOperation(async () => {
+            console.log('⬇️ Exporting...');
             
-            if (target) {
-                fileFound = target;
-                break; // เจอแล้ว ออกจากลูปทันที
-            }
-            
-            // เช็คว่ามีไฟล์ .crdownload (กำลังโหลด) ไหม
-            if (files.some(f => f.endsWith('.crdownload'))) {
-                // ถ้ามีไฟล์กำลังโหลด ให้รอต่อเงียบๆ ไม่ต้องนับเวลาถอยหลังกดใหม่
-                console.log('      Downloading in progress...');
-            }
-        }
+            // ย้ำสิทธิ์อีกรอบ
+            const client = await page.target().createCDPSession();
+            await client.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: downloadPath });
 
-        // ถ้าผ่านไป 3 นาทีแล้วไฟล์ยังไม่มา (และไม่มีไฟล์กำลังโหลด) ให้ลองกดใหม่
-        if (!fileFound) {
-            console.warn('⚠️ File not started. Retry clicking...');
             await page.evaluate(() => document.getElementById('btnexport').click());
             
-            // รอรอบสองอีก 180 วินาที
+            console.log('   Waiting for file...');
+            // รอ 3 นาทีต่อรอบการกด
             for (let i = 0; i < 180; i++) {
                 await new Promise(r => setTimeout(r, 1000));
                 const files = fs.readdirSync(downloadPath);
-                const target = files.find(f => (f.endsWith('.xlsx') || f.endsWith('.xls')) && !f.endsWith('.crdownload'));
-                if (target) {
-                    fileFound = target;
-                    break;
+                if (files.some(f => (f.endsWith('.xlsx') || f.endsWith('.xls')) && !f.endsWith('.crdownload'))) {
+                    return; // เจอไฟล์แล้ว จบฟังก์ชัน Retry เลย
                 }
             }
-        }
+            throw new Error('File not received in 180s'); // โยน Error เพื่อให้ Retry Loop ทำงาน (กดใหม่)
+        }, 3, 5000, "Export Step");
 
-        if (!fileFound) {
-            // เช็คไฟล์ใน Folder ครั้งสุดท้ายเพื่อ Debug
-            console.log('📂 Files in folder:', fs.readdirSync(downloadPath));
-            await page.screenshot({ path: path.join(downloadPath, 'error_step6_timeout.png') });
-            throw new Error('❌ Step 6 Failed: File did not arrive.');
-        }
-
-        console.log(`✅ File Downloaded: ${fileFound}`);
+        // ---------------------------------------------------------
+        // Final Check & Email
+        // ---------------------------------------------------------
+        const finalFile = fs.readdirSync(downloadPath).find(f => (f.endsWith('.xlsx') || f.endsWith('.xls')) && !f.endsWith('.crdownload'));
         
-        // รออีก 5 วินาทีเพื่อให้ไฟล์เขียนเสร็จสมบูรณ์ 100%
-        await new Promise(r => setTimeout(r, 5000));
+        if (!finalFile) throw new Error('❌ Final Check: No file found.');
+        console.log(`✅ Success! File: ${finalFile}`);
+        
+        await new Promise(r => setTimeout(r, 5000)); // รอเขียนไฟล์จบ
         await browser.close();
 
-        // ---------------------------------------------------------
-        // Step 7: Send Email
-        // ---------------------------------------------------------
-        console.log('📧 Step 7: Sending Email...');
+        console.log('📧 Sending Email...');
         const transporter = nodemailer.createTransport({
             service: 'gmail',
             auth: { user: EMAIL_USER, pass: EMAIL_PASS }
@@ -211,8 +191,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
             from: `"DTC Bot" <${EMAIL_USER}>`,
             to: EMAIL_TO,
             subject: `รายงาน DTC Report - ${new Date().toLocaleDateString()}`,
-            text: `ดาวน์โหลดสำเร็จครับ\nไฟล์: ${fileFound}`,
-            attachments: [{ filename: fileFound, path: path.join(downloadPath, fileFound) }]
+            text: `ดาวน์โหลดสำเร็จ (Resilience Mode)\nไฟล์: ${finalFile}`,
+            attachments: [{ filename: finalFile, path: path.join(downloadPath, finalFile) }]
         });
 
         console.log('🎉 Mission Complete!');
