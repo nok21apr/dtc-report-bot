@@ -10,15 +10,15 @@ const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
-// ฟังก์ชัน Retry (หัวใจสำคัญของความเสถียร)
+// ฟังก์ชัน Retry (ช่วยให้บอทตื๊อเก่งขึ้น)
 async function retryOperation(operation, maxRetries, delay, opName) {
     let lastError;
     for (let i = 0; i < maxRetries; i++) {
         try {
-            console.log(`🔄 Attempt ${i + 1}/${maxRetries}: ${opName}`);
+            console.log(`🔄 [${opName}] Attempt ${i + 1}/${maxRetries}`);
             return await operation();
         } catch (error) {
-            console.warn(`⚠️ ${opName} failed: ${error.message}`);
+            console.warn(`⚠️ [${opName}] Failed: ${error.message}`);
             lastError = error;
             if (i < maxRetries - 1) {
                 console.log(`⏳ Waiting ${delay/1000}s before retry...`);
@@ -30,7 +30,7 @@ async function retryOperation(operation, maxRetries, delay, opName) {
 }
 
 (async () => {
-    console.log('🚀 Starting Bot (Ultimate Resilience Mode)...');
+    console.log('🚀 Starting Bot (Stability & Download Fix)...');
 
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
         console.error('❌ Error: Secrets incomplete.');
@@ -54,29 +54,31 @@ async function retryOperation(operation, maxRetries, delay, opName) {
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
                 '--window-size=1920,1080',
-                '--lang=th-TH,th'
+                '--lang=th-TH,th',
+                // ป้องกัน Chrome หลับระหว่างรอนานๆ
+                '--disable-background-timer-throttling',
+                '--disable-backgrounding-occluded-windows',
+                '--disable-renderer-backgrounding'
             ]
         });
 
         page = await browser.newPage();
-        // เพิ่ม Timeout เป็น 30 นาที (เผื่อ Retry หลายรอบ)
-        page.setDefaultNavigationTimeout(1800000);
-        page.setDefaultTimeout(1800000);
+        // Timeout รวม 20 นาที
+        page.setDefaultNavigationTimeout(1200000);
+        page.setDefaultTimeout(1200000);
 
         await page.emulateTimezone('Asia/Bangkok');
         const client = await page.target().createCDPSession();
         await client.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: downloadPath });
 
         // ---------------------------------------------------------
-        // Step 1: Login with Smart Retry
+        // Step 1: Login (Retry Logic)
         // ---------------------------------------------------------
         await retryOperation(async () => {
             console.log('🌐 Loading Login Page...');
-            // ลองเข้าเว็บ (ถ้าครั้งแรกพัง จะ Retry)
             await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'domcontentloaded', timeout: 60000 });
             
-            // รอให้ช่อง User มาจริงๆ
-            await page.waitForSelector('#txtname', { visible: true, timeout: 30000 });
+            await page.waitForSelector('#txtname', { visible: true, timeout: 60000 });
             
             console.log('🔐 Filling Credentials...');
             await page.evaluate(() => {
@@ -87,13 +89,14 @@ async function retryOperation(operation, maxRetries, delay, opName) {
             await page.type('#txtpass', DTC_PASS);
             
             console.log('👉 Clicking Login...');
+            // ใช้ page.click (เมาส์จริง) ผสมกับ waitForFunction
             await Promise.all([
-                // รอหน้าเปลี่ยน หรือ รอให้ปุ่ม Login หายไป
-                page.evaluate(() => document.getElementById('btnLogin').click()),
-                page.waitForFunction(() => !document.querySelector('#txtname'), { timeout: 30000 })
+                page.click('#btnLogin'),
+                // เพิ่มเวลารอตรวจสอบผลเป็น 60 วินาที (จากเดิม 10-30 วิ) เผื่อเว็บช้า
+                page.waitForFunction(() => !document.querySelector('#txtname'), { timeout: 60000 })
             ]);
             console.log('✅ Login Success');
-        }, 3, 10000, "Login Step"); // ลอง 3 ครั้ง พัก 10 วิ
+        }, 3, 10000, "Login Step");
 
         // ---------------------------------------------------------
         // Step 2-4: Navigate & Fill Form
@@ -102,12 +105,13 @@ async function retryOperation(operation, maxRetries, delay, opName) {
             console.log('📄 Navigating to Report...');
             await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'domcontentloaded', timeout: 60000 });
             
-            await page.waitForSelector('#speed_max', { visible: true, timeout: 30000 });
+            await page.waitForSelector('#speed_max', { visible: true, timeout: 60000 });
             
             console.log('📝 Filling Form...');
             await page.evaluate(() => {
                 document.getElementById('speed_max').value = '55';
                 
+                // Logic วันที่
                 var d = new Date(); d.setDate(1); d.setDate(d.getDate() - 2); 
                 var y = d.getFullYear(); var m = d.getMonth() + 1; var day = d.getDate(); 
                 var start = y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day + ' 00:00';
@@ -132,43 +136,64 @@ async function retryOperation(operation, maxRetries, delay, opName) {
             });
 
             console.log('🔍 Clicking Search...');
+            // เลื่อนหาปุ่มก่อนกด (เผื่ออยู่นอกจอ)
             await page.evaluate(() => {
-                if(typeof sertch_data === 'function') sertch_data();
-                else document.querySelector("span[onclick='sertch_data();']").click();
+                const btn = document.querySelector("span[onclick='sertch_data();']");
+                if(btn) {
+                    btn.scrollIntoView();
+                    btn.click();
+                } else if(typeof sertch_data === 'function') {
+                    sertch_data();
+                }
             });
         }, 3, 5000, "Navigate & Fill Form");
 
         // ---------------------------------------------------------
-        // Step 5: Wait Data (120s)
+        // Step 5: Wait Data (120s Hard Wait)
         // ---------------------------------------------------------
-        console.log('⏳ Waiting 120s for Data (Mandatory)...');
+        console.log('⏳ Waiting 120s for Data (UI.Vision Standard)...');
         await page.waitForSelector('#btnexport', { visible: true, timeout: 300000 });
         await new Promise(r => setTimeout(r, 120000));
         console.log('✅ Data Ready.');
 
         // ---------------------------------------------------------
-        // Step 6: Export (Retry Logic)
+        // Step 6: Export (Improved Click & Wait)
         // ---------------------------------------------------------
         await retryOperation(async () => {
             console.log('⬇️ Exporting...');
             
-            // ย้ำสิทธิ์อีกรอบ
+            // ย้ำสิทธิ์
             const client = await page.target().createCDPSession();
             await client.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: downloadPath });
 
-            await page.evaluate(() => document.getElementById('btnexport').click());
+            // เลื่อนหาปุ่ม Export และกดด้วยเมาส์จริง (เสถียรกว่า JS ในบางเคส)
+            const exportBtn = await page.$('#btnexport');
+            if (exportBtn) {
+                // เลื่อนมาให้เห็น
+                await page.evaluate(el => el.scrollIntoView(), exportBtn);
+                // กด
+                await exportBtn.click();
+            } else {
+                // ถ้าหา Element ไม่เจอ ลองกดด้วย JS
+                await page.evaluate(() => document.getElementById('btnexport').click());
+            }
             
-            console.log('   Waiting for file...');
-            // รอ 3 นาทีต่อรอบการกด
+            console.log('   Waiting for file (Up to 180s)...');
+            // รอ 3 นาทีต่อรอบ
             for (let i = 0; i < 180; i++) {
                 await new Promise(r => setTimeout(r, 1000));
                 const files = fs.readdirSync(downloadPath);
+                // หาไฟล์ Excel
                 if (files.some(f => (f.endsWith('.xlsx') || f.endsWith('.xls')) && !f.endsWith('.crdownload'))) {
-                    return; // เจอไฟล์แล้ว จบฟังก์ชัน Retry เลย
+                    return; // เจอแล้ว ออกเลย
+                }
+                // ถ้ามีไฟล์ .crdownload แปลว่ากำลังมา ให้รอต่อ
+                if (files.some(f => f.endsWith('.crdownload'))) {
+                    if (i % 10 === 0) console.log('      Downloading in progress...');
                 }
             }
-            throw new Error('File not received in 180s'); // โยน Error เพื่อให้ Retry Loop ทำงาน (กดใหม่)
-        }, 3, 5000, "Export Step");
+            throw new Error('File download timed out (180s)'); // เพื่อให้ Retry ทำงาน
+        }, 3, 10000, "Export Step"); // Retry 3 ครั้ง พัก 10 วิ
 
         // ---------------------------------------------------------
         // Final Check & Email
@@ -178,7 +203,7 @@ async function retryOperation(operation, maxRetries, delay, opName) {
         if (!finalFile) throw new Error('❌ Final Check: No file found.');
         console.log(`✅ Success! File: ${finalFile}`);
         
-        await new Promise(r => setTimeout(r, 5000)); // รอเขียนไฟล์จบ
+        await new Promise(r => setTimeout(r, 5000));
         await browser.close();
 
         console.log('📧 Sending Email...');
@@ -191,7 +216,7 @@ async function retryOperation(operation, maxRetries, delay, opName) {
             from: `"DTC Bot" <${EMAIL_USER}>`,
             to: EMAIL_TO,
             subject: `รายงาน DTC Report - ${new Date().toLocaleDateString()}`,
-            text: `ดาวน์โหลดสำเร็จ (Resilience Mode)\nไฟล์: ${finalFile}`,
+            text: `ดาวน์โหลดสำเร็จ (Stable Fix)\nไฟล์: ${finalFile}`,
             attachments: [{ filename: finalFile, path: path.join(downloadPath, finalFile) }]
         });
 
