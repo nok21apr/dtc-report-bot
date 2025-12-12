@@ -84,10 +84,10 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await page.waitForSelector('#speed_max', { visible: true });
         
         await page.evaluate(() => {
-            // Speed
+            // Speed (Command 8)
             document.getElementById('speed_max').value = '55';
             
-            // Date Formula (UI.Vision)
+            // Date Formula (UI.Vision Command 9-12)
             var d = new Date(); d.setDate(1); d.setDate(d.getDate() - 2); 
             var y = d.getFullYear(); var m = d.getMonth() + 1; var day = d.getDate(); 
             var start = y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day + ' 00:00';
@@ -103,13 +103,20 @@ const EMAIL_TO = process.env.EMAIL_TO;
             document.getElementById('date9').dispatchEvent(new Event('change'));
             document.getElementById('date10').dispatchEvent(new Event('change'));
 
-            // Options
+            // Options (Command 13)
             document.getElementById('ddlMinute').value = '1';
-            const sel = document.getElementById('ddl_truck');
-            for(let o of sel.options) {
-                if(o.text.includes('ทั้งหมด')) { sel.value = o.value; break; }
-            }
-            sel.dispatchEvent(new Event('change', { bubbles: true }));
+            
+            // Select Truck (UI.Vision Command 14) - ใช้โค้ดต้นฉบับเป๊ะๆ
+            var selectElement = document.getElementById('ddl_truck'); 
+            var options = selectElement.options; 
+            for (var i = 0; i < options.length; i++) { 
+                if (options[i].text.includes('ทั้งหมด')) { 
+                    selectElement.value = options[i].value; 
+                    break; 
+                } 
+            } 
+            var event = new Event('change', { bubbles: true }); 
+            selectElement.dispatchEvent(event);
         });
 
         // ---------------------------------------------------------
