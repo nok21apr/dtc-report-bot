@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Clean & Simple Mode)...');
+    console.log('🚀 Starting Bot (Clean & Simple Mode + Fix Select Truck)...');
 
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
         console.error('❌ Error: Secrets incomplete.');
@@ -41,7 +41,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         page = await browser.newPage();
         
-        // Timeout 5 นาที (พอดีๆ ไม่นานเกินรอ)
+        // Timeout 5 นาที
         page.setDefaultNavigationTimeout(300000);
         page.setDefaultTimeout(300000);
 
@@ -55,18 +55,13 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('1️⃣ Step 1: Login...');
         await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'domcontentloaded' });
         
-        // รอช่องกรอกรหัส
         await page.waitForSelector('#txtname', { visible: true, timeout: 60000 });
-        
-        // พิมพ์รหัส
         await page.type('#txtname', DTC_USER);
         await page.type('#txtpass', DTC_PASS);
         
-        // กดปุ่ม Login
         console.log('   Clicking Login...');
         await Promise.all([
             page.evaluate(() => document.getElementById('btnLogin').click()),
-            // รอจนกว่าช่อง User จะหายไป (แปลว่าเปลี่ยนหน้าแล้ว)
             page.waitForFunction(() => !document.querySelector('#txtname'), { timeout: 60000 })
         ]);
         console.log('✅ Login Success');
@@ -78,11 +73,17 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'domcontentloaded' });
         
         // ---------------------------------------------------------
-        // Step 3: Fill Form
+        // Step 3: Fill Form (แก้ไขจุดเลือกทะเบียนรถ)
         // ---------------------------------------------------------
         console.log('3️⃣ Step 3: Fill Form...');
-        await page.waitForSelector('#speed_max', { visible: true });
         
+        // รอให้ช่องกรอกข้อมูลสำคัญๆ โผล่มาก่อน
+        await page.waitForSelector('#speed_max', { visible: true });
+        await page.waitForSelector('#ddl_truck', { visible: true }); // เพิ่ม: รอให้ Dropdown รถโผล่มา
+        
+        // รอสักนิดเพื่อให้ตัวเลือกใน Dropdown โหลดมาครบ (บางทีเว็บโหลดข้อมูลรถทีหลัง)
+        await new Promise(r => setTimeout(r, 2000));
+
         await page.evaluate(() => {
             // Speed (Command 8)
             document.getElementById('speed_max').value = '55';
@@ -106,7 +107,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
             // Options (Command 13)
             document.getElementById('ddlMinute').value = '1';
             
-            // Select Truck (UI.Vision Command 14) - ใช้โค้ดต้นฉบับเป๊ะๆ
+            // --- Select Truck (UI.Vision Command 14) ---
+            // ใช้โค้ด JavaScript ตามที่ระบุในไฟล์ UI.Vision เป๊ะๆ
             var selectElement = document.getElementById('ddl_truck'); 
             var options = selectElement.options; 
             for (var i = 0; i < options.length; i++) { 
@@ -132,11 +134,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // Step 5: Wait 120s (Hard Wait)
         // ---------------------------------------------------------
         console.log('⏳ Step 5: Waiting 120s (Data Loading)...');
-        
-        // รอให้ปุ่ม Export โผล่ก่อน
         await page.waitForSelector('#btnexport', { visible: true, timeout: 300000 });
-        
-        // บังคับรอ 120 วินาที (2 นาที) ตาม UI.Vision
         await new Promise(r => setTimeout(r, 120000));
         console.log('✅ Data Loaded.');
 
@@ -145,37 +143,27 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // ---------------------------------------------------------
         console.log('6️⃣ Step 6: Exporting...');
         
-        // ย้ำสิทธิ์อีกรอบ
         await client.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: downloadPath });
 
-        // กดปุ่ม Export 1 ครั้ง
         await page.evaluate(() => document.getElementById('btnexport').click());
         
         console.log('   Waiting for file (Max 5 mins)...');
         let finalFile = null;
 
-        // วนลูปเช็คไฟล์ทุก 1 วินาที (นานสุด 5 นาที)
         for (let i = 0; i < 300; i++) {
             await new Promise(r => setTimeout(r, 1000));
             const files = fs.readdirSync(downloadPath);
-            
-            // หาไฟล์ .xlsx ที่เสร็จสมบูรณ์ (ไม่มี .crdownload)
             const target = files.find(f => (f.endsWith('.xlsx') || f.endsWith('.xls')) && !f.endsWith('.crdownload'));
-            
             if (target) {
                 finalFile = target;
                 break;
             }
-            
             if (i > 0 && i % 30 === 0) console.log(`   ...still waiting (${i}s)`);
         }
 
         if (!finalFile) {
-            // ถ้า 5 นาทีแล้วยังไม่มา ให้ลองกดซ้ำอีก 1 ที (Last Resort)
             console.warn('⚠️ Retry clicking Export...');
             await page.evaluate(() => document.getElementById('btnexport').click());
-            
-            // รออีก 60 วิ
             for (let i = 0; i < 60; i++) {
                 await new Promise(r => setTimeout(r, 1000));
                 const files = fs.readdirSync(downloadPath);
