@@ -35,4 +35,4 @@ jobs:
       with:
         name: debug-screenshots
         path: downloads/*.png
-        retention-days: 5
+        retention-days: 1
