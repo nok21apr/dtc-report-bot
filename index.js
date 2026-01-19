@@ -190,7 +190,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
             from: `"DTC Bot" <${EMAIL_USER}>`,
             to: EMAIL_TO,
             subject: `รายงาน DTC Report - ${new Date().toLocaleDateString()}`,
-            text: `ดาวน์โหลดสำเร็จ\nไฟล์: ${finalFile}`,
+            text: `ถึง ผู้เกี่ยวข้อง\nไฟล์: ${finalFile}`,
             attachments: [{ filename: finalFile, path: path.join(downloadPath, finalFile) }]
         });
 
@@ -205,3 +205,4 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
