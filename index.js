@@ -135,7 +135,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // ---------------------------------------------------------
         console.log('⏳ Step 5: Waiting 120s (Data Loading)...');
         await page.waitForSelector('#btnexport', { visible: true, timeout: 300000 });
-        await new Promise(r => setTimeout(r, 120000));
+        await new Promise(r => setTimeout(r, 300000));
         console.log('✅ Data Loaded.');
 
         // ---------------------------------------------------------
@@ -205,6 +205,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
 
 
 
