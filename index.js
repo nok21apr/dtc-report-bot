@@ -82,7 +82,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await page.waitForSelector('#ddl_truck', { visible: true }); // เพิ่ม: รอให้ Dropdown รถโผล่มา
         
         // รอสักนิดเพื่อให้ตัวเลือกใน Dropdown โหลดมาครบ (บางทีเว็บโหลดข้อมูลรถทีหลัง)
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 10000));
 
         await page.evaluate(() => {
             // Speed (Command 8)
@@ -205,6 +205,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
 
 
 
