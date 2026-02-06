@@ -55,14 +55,14 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('1️⃣ Step 1: Login...');
         await page.goto('https://gps.dtc.co.th/ultimate/index.php', { waitUntil: 'domcontentloaded' });
         
-        await page.waitForSelector('#txtname', { visible: true, timeout: 60000 });
+        await page.waitForSelector('#txtname', { visible: true, timeout: 90000 });
         await page.type('#txtname', DTC_USER);
         await page.type('#txtpass', DTC_PASS);
         
         console.log('   Clicking Login...');
         await Promise.all([
             page.evaluate(() => document.getElementById('btnLogin').click()),
-            page.waitForFunction(() => !document.querySelector('#txtname'), { timeout: 60000 })
+            page.waitForFunction(() => !document.querySelector('#txtname'), { timeout: 90000 })
         ]);
         console.log('✅ Login Success');
 
@@ -205,6 +205,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
 
 
 
