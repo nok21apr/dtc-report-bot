@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Step 3: ARIA Label Update)...');
+    console.log('🚀 Starting Bot (Step 3: ARIA Label & Date Logic Update)...');
 
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
         console.error('❌ Error: Secrets incomplete. Please check your environment variables.');
@@ -102,7 +102,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         }
 
         // ---------------------------------------------------------
-        // Step 3: Fill Form (Updated with ARIA Labels)
+        // Step 3: Fill Form (Updated Logic)
         // ---------------------------------------------------------
         console.log('3️⃣ Step 3: Check & Fill Form...');
         
@@ -119,17 +119,15 @@ const EMAIL_TO = process.env.EMAIL_TO;
             console.log('   Form input not found. Selecting Report Type...');
             try {
                 // 1. คลิกเปิด Dropdown (Trigger)
-                // พยายามหาจากโครงสร้างหน้าเว็บ (มักจะเป็น Dropdown ตัวแรกๆ ใน Main Scroll)
+                // เราจะหา div ที่มี class p-dropdown ซึ่งน่าจะเป็นตัวเลือกประเภทรายงาน (มักอยู่ตัวแรกๆ หรือตัวที่ 4 ใน layout)
                 const dropdownTrigger = 'div.scroll-main div.p-dropdown, div.scroll-main div:nth-of-type(4)'; 
                 await page.waitForSelector(dropdownTrigger, { timeout: 10000 });
                 await page.click(dropdownTrigger);
                 console.log('   Clicked Report Dropdown Trigger');
                 
-                // รอ Animation
                 await new Promise(r => setTimeout(r, 1000));
 
-                // 2. เลือก Item โดยใช้ aria-label="ความเร็วเกิน(กำหนดค่าเอง)"
-                // หมายเหตุ: ใช้ li[role="option"] หรือ li เฉยๆ
+                // 2. เลือก Item จาก aria-label
                 const reportOptionSelector = 'li[aria-label="ความเร็วเกิน(กำหนดค่าเอง)"]';
                 console.log(`   Clicking option: ${reportOptionSelector}`);
                 
@@ -159,36 +157,15 @@ const EMAIL_TO = process.env.EMAIL_TO;
             await page.click(groupTrigger);
             await new Promise(r => setTimeout(r, 1000));
 
-            // 2. เลือก Item โดยใช้ aria-label="กลุ่มทั้งหมด"
+            // 2. เลือก Item จาก aria-label
             const groupOptionSelector = 'li[aria-label="กลุ่มทั้งหมด"]';
             console.log(`   Clicking group option: ${groupOptionSelector}`);
             
-            // ใช้ evaluate click เพื่อความชัวร์ หรือ Puppeteer click
-            // บางครั้ง aria-label อยู่ใน span ข้างใน
-            const foundGroup = await page.evaluate((sel) => {
-                // ลองหา li ที่มี aria-label ตรงๆ
-                let item = document.querySelector(sel);
-                if (!item) {
-                    // ถ้าไม่เจอ ลองหา li ที่มี text ว่า "กลุ่มทั้งหมด"
-                    const lis = document.querySelectorAll('li.p-dropdown-item');
-                    for (const li of lis) {
-                        if (li.innerText.includes('กลุ่มทั้งหมด') || li.getAttribute('aria-label') === 'กลุ่มทั้งหมด') {
-                            item = li;
-                            break;
-                        }
-                    }
-                }
-                if (item) {
-                    item.click();
-                    return true;
-                }
-                return false;
-            }, groupOptionSelector);
-            
-            if(foundGroup) console.log('   Selected Group "กลุ่มทั้งหมด"');
-            else console.log('⚠️ Group Option not found (might rely on default).');
+            await page.waitForSelector(groupOptionSelector, { visible: true, timeout: 5000 });
+            await page.click(groupOptionSelector);
+            console.log('   Selected Group "กลุ่มทั้งหมด"');
 
-        } catch (e) { console.log('⚠️ Skipping Group Selection.'); }
+        } catch (e) { console.log('⚠️ Skipping Group Selection / Error: ' + e.message); }
 
         // 3.3 Select All Vehicles
         console.log('   Selecting All Vehicles...');
@@ -199,9 +176,9 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await new Promise(r => setTimeout(r, 1000));
 
         // คลิก Checkbox "Select All"
-        // ใช้ selector ที่เจาะจงไปที่ checkbox ใน header ของ panel
-        // หลีกเลี่ยงการใช้ aria-label ของ input ตรงๆ เพราะอาจเปลี่ยนจาก "Select All" เป็น "Unselect All"
-        const selectAllContainer = 'div.p-multiselect-header .p-checkbox';
+        // ใช้ Selector ที่เจาะจงไปที่ Input ใน Header ตามที่คุณให้มา
+        // แต่ Puppeteer มักจะคลิกที่ตัว div.p-checkbox container แทน input โดยตรงเพื่อให้ event ทำงาน
+        const selectAllContainer = 'div.p-multiselect-header div.p-checkbox';
         
         console.log(`   Clicking Select All Checkbox: ${selectAllContainer}`);
         try {
@@ -214,18 +191,37 @@ const EMAIL_TO = process.env.EMAIL_TO;
         
         await page.keyboard.press('Escape');
 
-        // 3.4 Date Range
+        // 3.4 Date Range (Updated Logic)
         console.log('   Setting Date Range...');
-        const d = new Date(); d.setDate(1); d.setDate(d.getDate() - 2); 
-        const y = d.getFullYear(); const m = d.getMonth() + 1; const day = d.getDate(); 
-        const d2 = new Date(); const y2 = d2.getFullYear(); const m2 = d2.getMonth() + 1; 
-        const last = new Date(y2, m2, 0).getDate(); 
+        
+        // Logic: วันสุดท้ายของเดือนก่อนหน้า ถอยหลังไป 2 วัน จนถึง วันสุดท้ายของเดือนปัจจุบัน
+        // Start Date Calculation:
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth(); // 0-11
+        
+        // หาวันที่ 1 ของเดือนปัจจุบัน แล้วลบออก 2 วัน จะได้วันตามที่ต้องการ (เช่น 1 Feb - 2 days = 30 Jan)
+        const startDate = new Date(currentYear, currentMonth, 1);
+        startDate.setDate(startDate.getDate() - 2); 
+        
+        // End Date Calculation: วันสุดท้ายของเดือนปัจจุบัน
+        const endDate = new Date(currentYear, currentMonth + 1, 0); // วันที่ 0 ของเดือนถัดไป = วันสุดท้ายของเดือนปัจจุบัน
+        
         const pad = (n) => n < 10 ? '0' + n : n;
-        const startDateStr = `${pad(day)}/${pad(m)}/${y} 00:00:00`;
-        const endDateStr = `${pad(last)}/${pad(m2)}/${y2} 23:59:59`;
+        
+        const formatDateTime = (date, isEnd = false) => {
+            const d = pad(date.getDate());
+            const m = pad(date.getMonth() + 1);
+            const y = date.getFullYear();
+            const time = isEnd ? '23:59:59' : '00:00:00';
+            return `${d}/${m}/${y} ${time}`;
+        };
+
+        const startDateStr = formatDateTime(startDate, false);
+        const endDateStr = formatDateTime(endDate, true);
         const fullDateString = `${startDateStr} - ${endDateStr}`;
         
-        console.log(`      Date: ${fullDateString}`);
+        console.log(`      Calculated Date: ${fullDateString}`);
 
         const dateInputSelector = 'div:nth-of-type(7) input';
         await page.click(dateInputSelector, { clickCount: 3 });
