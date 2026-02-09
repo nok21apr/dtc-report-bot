@@ -11,12 +11,12 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Headless Mode for Server)...');
+    console.log('🚀 Starting Bot (Server Mode + Fix Login)...');
 
     // ตรวจสอบค่าตัวแปร (สำคัญมากเมื่อรันบน Server)
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
         console.error('❌ Error: Secrets incomplete. Please check your environment variables.');
-        // process.exit(1); // อาจจะ comment ไว้ก่อนถ้าอยากเทสแค่เปิด Browser
+        // process.exit(1); 
     }
 
     const downloadPath = path.join(__dirname, 'downloads');
@@ -29,14 +29,14 @@ const EMAIL_TO = process.env.EMAIL_TO;
     try {
         console.log('🖥️ Launching Browser...');
         browser = await puppeteer.launch({
-            // *สำคัญ* ต้องใช้ 'new' หรือ true เมื่อรันบน Server/GitHub Actions
+            // ✅ แก้ไข 1: ใช้ 'new' สำหรับรันบน Server
             headless: 'new', 
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
-                '--window-size=1920,1080', // กำหนดขนาดหน้าจอจำลองให้กว้างพอ
+                '--window-size=1920,1080',
                 '--lang=th-TH,th'
             ]
         });
@@ -58,19 +58,48 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // Step 1: Login
         // ---------------------------------------------------------
         console.log('1️⃣ Step 1: Login...');
-        await page.goto('https://gps.dtc.co.th/v2/login', { waitUntil: 'domcontentloaded' });
+        await page.goto('https://gps.dtc.co.th/v2/login', { waitUntil: 'networkidle2' });
         
+        // รอ Username และกรอก
         await page.waitForSelector('#Username', { visible: true });
-        await page.type('#Username', DTC_USER || 'TEST_USER'); // fallback กัน error
-        await page.type('#password1 > input', DTC_PASS || 'TEST_PASS');
+        await page.type('#Username', DTC_USER || 'TEST_USER');
+        
+        // รอสักนิดก่อนกรอก Password
+        await new Promise(r => setTimeout(r, 10000));
+
+        // ✅ แก้ไข 2: ใช้ Selector แบบกว้าง (input type password) แทน ID #password1 ที่อาจจะหาไม่เจอ
+        try {
+            console.log('   Typing Password...');
+            const passwordSelector = 'input[type="password"]';
+            await page.waitForSelector(passwordSelector, { visible: true, timeout: 30000 });
+            await page.type(passwordSelector, DTC_PASS || 'TEST_PASS');
+        } catch (e) {
+            console.error('⚠️ Password field fallback...');
+            // ถ้าหา input type password ไม่เจอ ลองหาจาก ID เดิม
+            await page.type('#password1 > input', DTC_PASS || 'TEST_PASS');
+        }
         
         console.log('   Clicking Login...');
-        await page.evaluate(() => {
-            const btn = document.querySelector('span.p-button-label'); 
-            if (btn) btn.click();
+        // ✅ แก้ไข 3: กดปุ่ม Login โดยอ้างอิงจาก HTML ที่คุณแนบมา (span.p-button-label text=เข้าสู่ระบบ)
+        const loginSuccess = await page.evaluate(() => {
+            // หา span ที่มีคำว่า 'เข้าสู่ระบบ' และ class 'p-button-label'
+            const spans = Array.from(document.querySelectorAll('span.p-button-label'));
+            const loginSpan = spans.find(el => el.textContent.includes('เข้าสู่ระบบ'));
+            
+            if (loginSpan) {
+                loginSpan.click();
+                return true;
+            } else {
+                // Fallback: หาปุ่ม submit ทั่วไป
+                const btn = document.querySelector('button[type="submit"]');
+                if (btn) { btn.click(); return true; }
+            }
+            return false;
         });
-        
-        // รอจนกว่าจะเข้าหน้า Dashboard หรือหน้า Login หายไป
+
+        if (!loginSuccess) console.log('⚠️ Login button click via JS might have failed, trying Puppeteer click...');
+
+        // รอจนกว่าหน้า Login จะเปลี่ยน (Username หายไป)
         await page.waitForFunction(() => !document.querySelector('#Username'), { timeout: 90000 });
         console.log('✅ Login Success');
 
