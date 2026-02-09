@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Server Mode + Fix Dropdown Selection)...');
+    console.log('🚀 Starting Bot (Final Version: Select by ID pv_id_32_2)...');
 
     // ตรวจสอบค่าตัวแปร
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
@@ -29,7 +29,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
     try {
         console.log('🖥️ Launching Browser...');
         browser = await puppeteer.launch({
-            headless: 'new', // ใช้ 'new' สำหรับ Server
+            headless: 'new', // ใช้ 'new' สำหรับ Server (GitHub Actions)
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -85,18 +85,18 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('✅ Login Success');
 
         // ---------------------------------------------------------
-        // Step 2: Navigate to Report (Modified Logic)
+        // Step 2: Navigate to Report
         // ---------------------------------------------------------
         console.log('2️⃣ Step 2: Go to Report Page...');
         
         try {
-            // ใช้ domcontentloaded เพื่อให้เร็วขึ้น
+            // ใช้ domcontentloaded เพื่อหลีกเลี่ยง timeout จาก network traffic
             await page.goto('https://gps.dtc.co.th/v2/report-main/car-usage/status', { waitUntil: 'domcontentloaded', timeout: 60000 });
         } catch (err) {
             console.log('⚠️ Navigation timeout (Normal for GPS sites), checking page content...');
         }
 
-        // รอให้แน่ใจว่าเข้ามาหน้า Report แล้วจริงๆ (เช็คจาก Sidebar หรือ Layout)
+        // รอให้แน่ใจว่าเข้ามาหน้า Report แล้วจริงๆ
         try {
             await page.waitForSelector('div.layout-main, div.layout-menu-container', { timeout: 20000 });
             console.log('✅ Report Page Structure Loaded');
@@ -111,7 +111,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         }
 
         // ---------------------------------------------------------
-        // Step 3: Fill Form (Updated Selector Logic)
+        // Step 3: Fill Form
         // ---------------------------------------------------------
         console.log('3️⃣ Step 3: Check & Fill Form...');
         
@@ -128,45 +128,48 @@ const EMAIL_TO = process.env.EMAIL_TO;
             console.log('   Form input not found. Selecting "ความเร็วเกิน(กำหนดค่าเอง)" from dropdown...');
             
             try {
-                // 1. คลิกเปิด Dropdown
-                // ใช้ Selector สำหรับตัวเปิด Dropdown (Trigger)
+                // 1. คลิกเปิด Dropdown (Trigger)
                 const dropdownTrigger = 'div.scroll-main div:nth-of-type(4)'; 
                 await page.waitForSelector(dropdownTrigger, { timeout: 10000 });
                 await page.click(dropdownTrigger);
                 console.log('   Clicked Dropdown Trigger');
                 
-                await new Promise(r => setTimeout(r, 2000)); // รอ Animation ของ Dropdown
+                // รอให้ Dropdown List กางออกมาก่อน (สำคัญ)
+                await page.waitForSelector('.p-dropdown-items', { visible: true, timeout: 5000 });
+
+                // 2. เลือก Item โดยใช้ ID: pv_id_32_2 (ตามที่ระบุ)
+                const targetId = '#pv_id_32_2';
+                console.log(`   Clicking option by ID: ${targetId}`);
                 
-                // 2. เลือก Item ตาม HTML ที่ User ให้มา: <li aria-label="ความเร็วเกิน(กำหนดค่าเอง)">
-                const optionSelector = 'li[aria-label="ความเร็วเกิน(กำหนดค่าเอง)"]';
-                console.log(`   Clicking option: ${optionSelector}`);
-                
-                // รอและคลิกที่ตัวเลือก
-                await page.waitForSelector(optionSelector, { visible: true, timeout: 5000 });
-                await page.click(optionSelector);
-                console.log('   Clicked "Overspeed" option successfully.');
+                try {
+                    // พยายามเลือกด้วย ID ก่อน
+                    await page.waitForSelector(targetId, { visible: true, timeout: 3000 });
+                    await page.click(targetId);
+                    console.log(`   Clicked ID ${targetId} successfully.`);
+                } catch (err) {
+                    console.log(`⚠️ ID ${targetId} not found, trying Text fallback...`);
+                    // Fallback: ใช้ XPath หาจาก Text (ถ้า ID เปลี่ยน)
+                    const optionText = 'ความเร็วเกิน(กำหนดค่าเอง)';
+                    const optionXPath = `//li[contains(@class, 'p-dropdown-item')]//span[contains(text(), '${optionText}')]`;
+                    
+                    const options = await page.$x(optionXPath);
+                    if (options.length > 0) {
+                        await page.evaluate(el => el.click(), options[0]);
+                        console.log(`   Clicked "${optionText}" option via Text.`);
+                    } else {
+                        throw new Error(`Option not found via ID (${targetId}) or Text.`);
+                    }
+                }
                 
             } catch (e) {
-                console.log('⚠️ Error selecting report type (Method 1):', e.message);
-                // Fallback: ลองหาด้วย Text ถ้า Method แรกพลาด
-                try {
-                     await page.evaluate(() => {
-                        const items = document.querySelectorAll('li.p-dropdown-item');
-                        for (const item of items) {
-                            if (item.innerText.includes('ความเร็วเกิน(กำหนดค่าเอง)')) {
-                                item.click();
-                                return;
-                            }
-                        }
-                    });
-                    console.log('   Clicked via Text Fallback');
-                } catch(err) { console.log('⚠️ Fallback failed'); }
+                console.log('⚠️ Error selecting report type:', e.message);
+                throw e; // ถ้าเลือกรายงานไม่ได้ ก็ไปต่อไม่ได้
             }
         } else {
             console.log('   Form input already visible.');
         }
 
-        // 3.1 รอให้ฟอร์มโหลดจริงๆ (ตอนนี้ควรจะมาแล้วหลังจากเลือก)
+        // 3.1 รอให้ฟอร์มโหลดจริงๆ
         console.log('   Waiting for Speed Input field...');
         await page.waitForSelector(speedInputSelector, { visible: true, timeout: 60000 });
         
@@ -353,4 +356,3 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
-
