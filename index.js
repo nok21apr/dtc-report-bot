@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Server Mode + Fix Login)...');
+    console.log('🚀 Starting Bot (Server Mode + Fix Step 2 Timeout)...');
 
     // ตรวจสอบค่าตัวแปร (สำคัญมากเมื่อรันบน Server)
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
@@ -65,7 +65,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await page.type('#Username', DTC_USER || 'TEST_USER');
         
         // รอสักนิดก่อนกรอก Password
-        await new Promise(r => setTimeout(r, 10000));
+        await new Promise(r => setTimeout(r, 1000));
 
         // ✅ แก้ไข 2: ใช้ Selector แบบกว้าง (input type password) แทน ID #password1 ที่อาจจะหาไม่เจอ
         try {
@@ -104,10 +104,57 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('✅ Login Success');
 
         // ---------------------------------------------------------
-        // Step 2: Navigate to Report
+        // Step 2: Navigate to Report (Modified)
         // ---------------------------------------------------------
         console.log('2️⃣ Step 2: Go to Report Page...');
-        await page.goto('https://gps.dtc.co.th/v2/report-main/car-usage/status', { waitUntil: 'networkidle2' });
+        
+        // ตัวแปร Selector สำหรับเช็คว่าเข้าหน้า Report สำเร็จ (ช่องกรอกความเร็ว)
+        const reportPageIndicator = 'div:nth-of-type(8) input'; 
+
+        // พยายามเข้าด้วย URL ก่อน (วิธีที่ 1)
+        try {
+            // ✅ แก้ไข: ใช้ 'domcontentloaded' แทน 'networkidle2' เพราะเว็บ GPS มี Data วิ่งตลอดทำให้ Timeout
+            await page.goto('https://gps.dtc.co.th/v2/report-main/car-usage/status', { waitUntil: 'domcontentloaded', timeout: 60000 });
+        } catch (err) {
+            console.log('⚠️ Navigation command timed out (Normal for GPS sites), checking content...');
+        }
+
+        // เช็คว่าหน้าเว็บโหลดฟอร์มขึ้นมาหรือยัง
+        let arrived = false;
+        try {
+            await page.waitForSelector(reportPageIndicator, { visible: true, timeout: 10000 });
+            arrived = true;
+            console.log('✅ Report Page Loaded via URL');
+        } catch (e) {
+            console.log('⚠️ URL Navigation did not show form immediately.');
+        }
+
+        // ถ้ายังไม่เจอหน้า Report ให้ลองกดปุ่มเมนู "รายงานสถานะ" (วิธีที่ 2 - Fallback)
+        if (!arrived) {
+            console.log('🔄 Attempting to Click Sidebar Menu "รายงานสถานะ"...');
+            const menuClicked = await page.evaluate(() => {
+                // ค้นหาเมนูที่มีคำว่า "รายงานสถานะ"
+                const elements = Array.from(document.querySelectorAll('span, a, div, li'));
+                const target = elements.find(el => el.innerText && el.innerText.trim() === 'รายงานสถานะ');
+                if (target) {
+                    target.click();
+                    return true;
+                }
+                return false;
+            });
+
+            if (menuClicked) {
+                console.log('   Clicked Sidebar Menu. Waiting for form...');
+                await page.waitForSelector(reportPageIndicator, { visible: true, timeout: 60000 });
+                console.log('✅ Report Page Loaded via Click');
+            } else {
+                // ถ้าหาปุ่มไม่เจอ ลอง Screenshot ดู
+                 try { 
+                    await page.screenshot({ path: path.join(downloadPath, 'step2_failed.png'), fullPage: true });
+                } catch(e){}
+                throw new Error('❌ Failed to navigate to Report Page (URL and Click failed)');
+            }
+        }
         
         // ---------------------------------------------------------
         // Step 3: Fill Form
@@ -117,13 +164,13 @@ const EMAIL_TO = process.env.EMAIL_TO;
         const speedInputSelector = 'div:nth-of-type(8) input'; 
         // รอเพิ่มขึ้นเผื่อ Server ช้า
         await page.waitForSelector(speedInputSelector, { visible: true, timeout: 60000 });
-        await new Promise(r => setTimeout(r, 10000));
+        await new Promise(r => setTimeout(r, 5000));
 
         // 3.1 Report Type
         console.log('   Selecting Report Type...');
         try {
             await page.click('div.scroll-main div:nth-of-type(4) svg');
-            await new Promise(r => setTimeout(r, 10000));
+            await new Promise(r => setTimeout(r, 2000));
             
             const reportOption = await page.$x("//span[contains(text(), 'ความเร็วเกิน(กำหนดค่าเอง)')]");
             if (reportOption.length > 0) {
@@ -136,11 +183,11 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // 3.2 Vehicle Group
         console.log('   Selecting Vehicle Group...');
         try {
-            await new Promise(r => setTimeout(r, 10000));
+            await new Promise(r => setTimeout(r, 2000));
             const groupDropdown = 'div:nth-of-type(5) > div.flex-column span';
             if (await page.$(groupDropdown)) {
                 await page.click(groupDropdown);
-                await new Promise(r => setTimeout(r, 10000));
+                await new Promise(r => setTimeout(r, 2000));
                 const groupOption = await page.$x("//li//span[contains(text(), 'กลุ่มทั้งหมด')]");
                 if (groupOption.length > 0) await groupOption[0].click();
             }
@@ -151,7 +198,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         const vehicleSelectSelector = 'div.p-multiselect-label-container';
         await page.waitForSelector(vehicleSelectSelector);
         await page.click(vehicleSelectSelector);
-        await new Promise(r => setTimeout(r, 10000));
+        await new Promise(r => setTimeout(r, 2000));
 
         const selectAllCheckbox = 'div.p-multiselect-header > div.p-checkbox > input';
         await page.evaluate((sel) => {
@@ -250,7 +297,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
             }
         } catch (e) { console.log('⚠️ Export Menu Click Failed'); }
 
-        await new Promise(r => setTimeout(r, 10000)); // รอเมนูเด้ง
+        await new Promise(r => setTimeout(r, 5000)); // รอเมนูเด้ง
 
         // 2. เลือก CSV
         console.log('   Selecting CSV Option...');
@@ -276,7 +323,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         let finalFile = null;
 
         for (let i = 0; i < 300; i++) { // รอสูงสุด 5 นาที
-            await new Promise(r => setTimeout(r, 10000));
+            await new Promise(r => setTimeout(r, 1000));
             const files = fs.readdirSync(downloadPath);
             const target = files.find(f => f.endsWith('.csv') && !f.endsWith('.crdownload'));
             if (target) {
