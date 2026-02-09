@@ -11,9 +11,8 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Final Version: Select by ID pv_id_32_2)...');
+    console.log('🚀 Starting Bot (Step 3: ARIA Label Update)...');
 
-    // ตรวจสอบค่าตัวแปร
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
         console.error('❌ Error: Secrets incomplete. Please check your environment variables.');
         // process.exit(1); 
@@ -29,7 +28,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
     try {
         console.log('🖥️ Launching Browser...');
         browser = await puppeteer.launch({
-            headless: 'new', // ใช้ 'new' สำหรับ Server (GitHub Actions)
+            headless: 'new',
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -41,8 +40,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
         });
 
         page = await browser.newPage();
-        
-        // Timeout 5 นาที
         page.setDefaultNavigationTimeout(300000);
         page.setDefaultTimeout(300000);
         await page.setViewport({ width: 1920, height: 1080 });
@@ -62,16 +59,13 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await new Promise(r => setTimeout(r, 1000));
 
         try {
-            console.log('   Typing Password...');
             const passwordSelector = 'input[type="password"]';
             await page.waitForSelector(passwordSelector, { visible: true, timeout: 30000 });
             await page.type(passwordSelector, DTC_PASS || 'TEST_PASS');
         } catch (e) {
-            console.error('⚠️ Password field fallback...');
             await page.type('#password1 > input', DTC_PASS || 'TEST_PASS');
         }
         
-        console.log('   Clicking Login...');
         const loginSuccess = await page.evaluate(() => {
             const spans = Array.from(document.querySelectorAll('span.p-button-label'));
             const loginSpan = spans.find(el => el.textContent.includes('เข้าสู่ระบบ'));
@@ -88,15 +82,12 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // Step 2: Navigate to Report
         // ---------------------------------------------------------
         console.log('2️⃣ Step 2: Go to Report Page...');
-        
         try {
-            // ใช้ domcontentloaded เพื่อหลีกเลี่ยง timeout จาก network traffic
             await page.goto('https://gps.dtc.co.th/v2/report-main/car-usage/status', { waitUntil: 'domcontentloaded', timeout: 60000 });
         } catch (err) {
-            console.log('⚠️ Navigation timeout (Normal for GPS sites), checking page content...');
+            console.log('⚠️ Navigation timeout, checking page content...');
         }
 
-        // รอให้แน่ใจว่าเข้ามาหน้า Report แล้วจริงๆ
         try {
             await page.waitForSelector('div.layout-main, div.layout-menu-container', { timeout: 20000 });
             console.log('✅ Report Page Structure Loaded');
@@ -111,13 +102,13 @@ const EMAIL_TO = process.env.EMAIL_TO;
         }
 
         // ---------------------------------------------------------
-        // Step 3: Fill Form
+        // Step 3: Fill Form (Updated with ARIA Labels)
         // ---------------------------------------------------------
         console.log('3️⃣ Step 3: Check & Fill Form...');
         
         const speedInputSelector = 'div:nth-of-type(8) input'; 
         
-        // 3.0 เช็คว่ามีช่องกรอกความเร็วหรือยัง?
+        // 3.0 Report Type: "ความเร็วเกิน(กำหนดค่าเอง)"
         let isFormReady = false;
         try {
             await page.waitForSelector(speedInputSelector, { visible: true, timeout: 5000 });
@@ -125,79 +116,101 @@ const EMAIL_TO = process.env.EMAIL_TO;
         } catch(e) {}
         
         if (!isFormReady) {
-            console.log('   Form input not found. Selecting "ความเร็วเกิน(กำหนดค่าเอง)" from dropdown...');
-            
+            console.log('   Form input not found. Selecting Report Type...');
             try {
                 // 1. คลิกเปิด Dropdown (Trigger)
-                const dropdownTrigger = 'div.scroll-main div:nth-of-type(4)'; 
+                // พยายามหาจากโครงสร้างหน้าเว็บ (มักจะเป็น Dropdown ตัวแรกๆ ใน Main Scroll)
+                const dropdownTrigger = 'div.scroll-main div.p-dropdown, div.scroll-main div:nth-of-type(4)'; 
                 await page.waitForSelector(dropdownTrigger, { timeout: 10000 });
                 await page.click(dropdownTrigger);
-                console.log('   Clicked Dropdown Trigger');
+                console.log('   Clicked Report Dropdown Trigger');
                 
-                // รอให้ Dropdown List กางออกมาก่อน (สำคัญ)
-                await page.waitForSelector('.p-dropdown-items', { visible: true, timeout: 5000 });
+                // รอ Animation
+                await new Promise(r => setTimeout(r, 1000));
 
-                // 2. เลือก Item โดยใช้ ID: pv_id_32_2 (ตามที่ระบุ)
-                const targetId = '#pv_id_32_2';
-                console.log(`   Clicking option by ID: ${targetId}`);
+                // 2. เลือก Item โดยใช้ aria-label="ความเร็วเกิน(กำหนดค่าเอง)"
+                // หมายเหตุ: ใช้ li[role="option"] หรือ li เฉยๆ
+                const reportOptionSelector = 'li[aria-label="ความเร็วเกิน(กำหนดค่าเอง)"]';
+                console.log(`   Clicking option: ${reportOptionSelector}`);
                 
-                try {
-                    // พยายามเลือกด้วย ID ก่อน
-                    await page.waitForSelector(targetId, { visible: true, timeout: 3000 });
-                    await page.click(targetId);
-                    console.log(`   Clicked ID ${targetId} successfully.`);
-                } catch (err) {
-                    console.log(`⚠️ ID ${targetId} not found, trying Text fallback...`);
-                    // Fallback: ใช้ XPath หาจาก Text (ถ้า ID เปลี่ยน)
-                    const optionText = 'ความเร็วเกิน(กำหนดค่าเอง)';
-                    const optionXPath = `//li[contains(@class, 'p-dropdown-item')]//span[contains(text(), '${optionText}')]`;
-                    
-                    const options = await page.$x(optionXPath);
-                    if (options.length > 0) {
-                        await page.evaluate(el => el.click(), options[0]);
-                        console.log(`   Clicked "${optionText}" option via Text.`);
-                    } else {
-                        throw new Error(`Option not found via ID (${targetId}) or Text.`);
-                    }
-                }
+                await page.waitForSelector(reportOptionSelector, { visible: true, timeout: 5000 });
+                await page.click(reportOptionSelector);
+                console.log('   Selected Report Type successfully.');
                 
             } catch (e) {
                 console.log('⚠️ Error selecting report type:', e.message);
-                throw e; // ถ้าเลือกรายงานไม่ได้ ก็ไปต่อไม่ได้
+                throw e; 
             }
         } else {
             console.log('   Form input already visible.');
         }
 
-        // 3.1 รอให้ฟอร์มโหลดจริงๆ
+        // 3.1 รอให้ฟอร์มโหลด
         console.log('   Waiting for Speed Input field...');
         await page.waitForSelector(speedInputSelector, { visible: true, timeout: 60000 });
         
-        // 3.2 Vehicle Group
+        // 3.2 Vehicle Group: "กลุ่มทั้งหมด"
         console.log('   Selecting Vehicle Group...');
         try {
-            await new Promise(r => setTimeout(r, 2000));
-            const groupDropdown = 'div:nth-of-type(5) > div.flex-column span';
-            if (await page.$(groupDropdown)) {
-                await page.click(groupDropdown);
-                await new Promise(r => setTimeout(r, 2000));
-                const groupOption = await page.$x("//li//span[contains(text(), 'กลุ่มทั้งหมด')]");
-                if (groupOption.length > 0) await groupOption[0].click();
-            }
+            await new Promise(r => setTimeout(r, 1000));
+            
+            // 1. คลิกเปิด Dropdown (ถัดจาก Report Type)
+            const groupTrigger = 'div:nth-of-type(5) > div.flex-column span, div:nth-of-type(5) .p-dropdown';
+            await page.click(groupTrigger);
+            await new Promise(r => setTimeout(r, 1000));
+
+            // 2. เลือก Item โดยใช้ aria-label="กลุ่มทั้งหมด"
+            const groupOptionSelector = 'li[aria-label="กลุ่มทั้งหมด"]';
+            console.log(`   Clicking group option: ${groupOptionSelector}`);
+            
+            // ใช้ evaluate click เพื่อความชัวร์ หรือ Puppeteer click
+            // บางครั้ง aria-label อยู่ใน span ข้างใน
+            const foundGroup = await page.evaluate((sel) => {
+                // ลองหา li ที่มี aria-label ตรงๆ
+                let item = document.querySelector(sel);
+                if (!item) {
+                    // ถ้าไม่เจอ ลองหา li ที่มี text ว่า "กลุ่มทั้งหมด"
+                    const lis = document.querySelectorAll('li.p-dropdown-item');
+                    for (const li of lis) {
+                        if (li.innerText.includes('กลุ่มทั้งหมด') || li.getAttribute('aria-label') === 'กลุ่มทั้งหมด') {
+                            item = li;
+                            break;
+                        }
+                    }
+                }
+                if (item) {
+                    item.click();
+                    return true;
+                }
+                return false;
+            }, groupOptionSelector);
+            
+            if(foundGroup) console.log('   Selected Group "กลุ่มทั้งหมด"');
+            else console.log('⚠️ Group Option not found (might rely on default).');
+
         } catch (e) { console.log('⚠️ Skipping Group Selection.'); }
 
         // 3.3 Select All Vehicles
         console.log('   Selecting All Vehicles...');
+        // คลิกเปิด MultiSelect
         const vehicleSelectSelector = 'div.p-multiselect-label-container';
         await page.waitForSelector(vehicleSelectSelector);
         await page.click(vehicleSelectSelector);
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 1000));
 
-        const selectAllCheckbox = 'div.p-multiselect-header > div.p-checkbox > input';
-        await page.evaluate((sel) => {
-            const cb = document.querySelector(sel);
-            if (cb) cb.click();
-        }, selectAllCheckbox);
+        // คลิก Checkbox "Select All"
+        // ใช้ selector ที่เจาะจงไปที่ checkbox ใน header ของ panel
+        // หลีกเลี่ยงการใช้ aria-label ของ input ตรงๆ เพราะอาจเปลี่ยนจาก "Select All" เป็น "Unselect All"
+        const selectAllContainer = 'div.p-multiselect-header .p-checkbox';
+        
+        console.log(`   Clicking Select All Checkbox: ${selectAllContainer}`);
+        try {
+            await page.waitForSelector(selectAllContainer, { visible: true, timeout: 5000 });
+            await page.click(selectAllContainer);
+            console.log('   Clicked Select All Checkbox.');
+        } catch (e) {
+            console.log('⚠️ Select All Checkbox not found.');
+        }
         
         await page.keyboard.press('Escape');
 
@@ -205,10 +218,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('   Setting Date Range...');
         const d = new Date(); d.setDate(1); d.setDate(d.getDate() - 2); 
         const y = d.getFullYear(); const m = d.getMonth() + 1; const day = d.getDate(); 
-        
         const d2 = new Date(); const y2 = d2.getFullYear(); const m2 = d2.getMonth() + 1; 
         const last = new Date(y2, m2, 0).getDate(); 
-        
         const pad = (n) => n < 10 ? '0' + n : n;
         const startDateStr = `${pad(day)}/${pad(m)}/${y} 00:00:00`;
         const endDateStr = `${pad(last)}/${pad(m2)}/${y2} 23:59:59`;
@@ -265,11 +276,9 @@ const EMAIL_TO = process.env.EMAIL_TO;
         }
 
         // ---------------------------------------------------------
-        // Step 6: Export & Download (Strict CSV per Recording)
+        // Step 6: Export & Download
         // ---------------------------------------------------------
         console.log('6️⃣ Step 6: Exporting (CSV)...');
-        
-        // 1. คลิกปุ่ม Export Menu
         console.log('   Clicking Export Menu...');
         try {
             await page.waitForSelector('.p-toolbar-group-right', { timeout: 30000 }).catch(() => {});
@@ -287,9 +296,9 @@ const EMAIL_TO = process.env.EMAIL_TO;
             }
         } catch (e) { console.log('⚠️ Export Menu Click Failed'); }
 
-        await new Promise(r => setTimeout(r, 5000)); // รอเมนูเด้ง
+        await new Promise(r => setTimeout(r, 5000));
 
-        // 2. เลือก CSV
+        // เลือก CSV
         console.log('   Selecting CSV Option...');
         const csvSelected = await page.evaluate(() => {
             const items = document.querySelectorAll('li, span.p-menuitem-text');
@@ -303,15 +312,13 @@ const EMAIL_TO = process.env.EMAIL_TO;
         });
 
         if (!csvSelected) {
-            console.log('   Using XPath fallback for CSV...');
             const csvBtn = await page.$x("//span[contains(text(), 'CSV')]");
             if (csvBtn.length > 0) await csvBtn[0].click();
         }
 
-        // รอไฟล์ CSV Download
+        // รอไฟล์ CSV
         console.log('   Waiting for CSV file...');
         let finalFile = null;
-
         for (let i = 0; i < 300; i++) { 
             await new Promise(r => setTimeout(r, 1000));
             const files = fs.readdirSync(downloadPath);
@@ -321,7 +328,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
         }
 
         if (!finalFile) throw new Error('❌ Download Timeout: CSV File never arrived.');
-
         console.log(`✅ File Downloaded: ${finalFile}`);
         await browser.close();
 
