@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Fix Step 3 with User Snippet Logic)...');
+    console.log('🚀 Starting Bot (Fix Step 3 Vehicle Selection)...');
 
     /*
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
@@ -105,10 +105,9 @@ const EMAIL_TO = process.env.EMAIL_TO;
         const speedInputSelector = 'div:nth-of-type(8) input'; 
         
         // --- 3.1 เลือกข้อมูลสถานะ (Report Type) ---
-        // ใช้ Logic จาก Snippet: หา ARIA Label หรือ Structural Path ที่ไม่อิง ID
         let isFormReady = false;
         try {
-            await page.waitForSelector(speedInputSelector, { visible: true, timeout: 10000 });
+            await page.waitForSelector(speedInputSelector, { visible: true, timeout: 5000 });
             isFormReady = true;
         } catch(e) {}
         
@@ -116,43 +115,31 @@ const EMAIL_TO = process.env.EMAIL_TO;
             console.log('   Selecting Status Info (Report Type)...');
             try {
                 // 1. คลิกเปิด Dropdown (Trigger)
-                // แปลงจาก user snippet: div:nth-of-type(4) > div.flex-column span
                 const triggerXPath = "//div[contains(@class, 'scroll-main')]//div[4]//span[contains(@class, 'p-dropdown-label')] | //span[contains(text(), 'ความเร็วเกิน(กำหนดค่าเอง)')]";
-                
                 await page.waitForXPath(triggerXPath, { visible: true, timeout: 10000 });
                 const [trigger] = await page.$x(triggerXPath);
-                if (trigger) {
-                    await trigger.click();
-                    console.log('   Clicked Dropdown Trigger');
-                } else {
-                    // Fallback to generic dropdown click
-                    await page.click('div.scroll-main div.p-dropdown');
-                }
+                if (trigger) await trigger.click();
+                else await page.click('div.scroll-main div.p-dropdown');
                 
-                // รอให้ List กางออกมา (p-dropdown-items)
-                await page.waitForSelector('.p-dropdown-items, [role="listbox"]', { visible: true, timeout: 10000 });
+                // รอให้ List กางออกมา
+                await page.waitForSelector('.p-dropdown-items, [role="listbox"]', { visible: true, timeout: 5000 });
 
-                // 2. เลือก Item (Option)
-                // แปลงจาก user snippet: aria-label="ความเร็วเกิน(กำหนดค่าเอง)" [role="option"]
-                // ใช้ XPath ที่หา text หรือ aria-label ภายใน li ที่มี role="option"
+                // 2. เลือก Item
                 const optionXPath = `
                     //li[@role='option'][@aria-label='ความเร็วเกิน(กำหนดค่าเอง)'] | 
                     //li[@role='option']//span[contains(text(), 'ความเร็วเกิน(กำหนดค่าเอง)')]
                 `;
-                
                 await page.waitForXPath(optionXPath, { visible: true, timeout: 5000 });
                 const [option] = await page.$x(optionXPath);
-                
                 if (option) {
                     await option.click();
                     console.log('   Selected: ความเร็วเกิน(กำหนดค่าเอง)');
                 } else {
                     throw new Error('Option element not found in list');
                 }
-                
             } catch (e) {
                 console.error('⚠️ Error selecting report type:', e.message);
-                // Attempt blind click on first option if specific fail
+                // Attempt blind click
                 try {
                      const opt = await page.$x("//li//span[contains(text(), 'ความเร็วเกิน')]");
                      if(opt.length > 0) await opt[0].click();
@@ -170,30 +157,51 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('   Selecting Vehicle Group...');
         try {
             await new Promise(r => setTimeout(r, 1000));
-            // คลิกเปิด Dropdown ถัดไป
+            // คลิกเปิด Dropdown
             const groupTrigger = 'div:nth-of-type(5) > div.flex-column span, div:nth-of-type(5) .p-dropdown';
             await page.click(groupTrigger);
             await new Promise(r => setTimeout(r, 1000));
 
-            // เลือก Item จาก aria-label
+            // เลือก Item
             const groupOptionSelector = 'li[aria-label="กลุ่มทั้งหมด"]';
             await page.waitForSelector(groupOptionSelector, { visible: true, timeout: 5000 });
             await page.click(groupOptionSelector);
             console.log('   Selected: กลุ่มทั้งหมด');
         } catch (e) { console.log('⚠️ Group selection skipped/failed: ' + e.message); }
 
-        // --- 3.3 เลือกรถ (Checkbox All) ---
-        console.log('   Selecting All Vehicles...');
-        const vehicleSelectSelector = 'div.p-multiselect-label-container';
-        await page.waitForSelector(vehicleSelectSelector);
-        await page.click(vehicleSelectSelector);
+        // --- 3.3 เลือกรถ (Checkbox All) - UPDATED FROM SNIPPET ---
+        console.log('   Selecting All Vehicles (Updated Logic)...');
+        try {
+            // 1. คลิกเปิด Dropdown (Selector จาก Snippet: div.p-multiselect-label-container > div)
+            const vehicleSelectTrigger = 'div.p-multiselect-label-container > div';
+            await page.waitForSelector(vehicleSelectSelector, { visible: true, timeout: 5000 });
+            await page.click(vehicleSelectTrigger);
+            console.log('   Opened Vehicle Multiselect.');
+        } catch (e) {
+            console.log('   Retry opening multiselect via fallback...');
+            await page.click('div.p-multiselect-label-container');
+        }
+
         await new Promise(r => setTimeout(r, 1000));
 
-        const checkboxWrapperSelector = 'div.p-multiselect-header div.p-checkbox';
         try {
+            // 2. คลิก Select All (Selector จาก Snippet: div.p-multiselect-header > div.p-checkbox > input)
+            // หมายเหตุ: Puppeteer บางครั้งคลิก input ที่ซ่อนอยู่ไม่ได้ อาจต้องคลิก parent div แทน
+            // เราจะลองคลิก wrapper ก่อน ถ้าไม่ได้จะใช้ evaluate คลิก input โดยตรง
+            const checkboxWrapperSelector = 'div.p-multiselect-header > div.p-checkbox';
+            
+            // รอให้ปุ่มปรากฏ
+            await page.waitForSelector(checkboxWrapperSelector, { visible: true, timeout: 5000 });
             await page.click(checkboxWrapperSelector);
-            console.log('   Clicked Checkbox via Wrapper class.');
-        } catch (e) { console.log('⚠️ Checkbox selection error: ' + e.message); }
+            console.log('   Clicked Select All Checkbox.');
+        } catch (e) {
+            console.log('⚠️ Checkbox selection error, trying JS Click on Input...');
+            // Fallback: ใช้ JS คลิกที่ input โดยตรงตาม snippet
+            await page.evaluate(() => {
+                const input = document.querySelector('div.p-multiselect-header > div.p-checkbox > input');
+                if (input) input.click();
+            });
+        }
         
         await page.keyboard.press('Escape');
 
