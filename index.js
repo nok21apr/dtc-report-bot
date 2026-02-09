@@ -4,21 +4,20 @@ const path = require('path');
 const nodemailer = require('nodemailer');
 
 // รับค่าจาก GitHub Secrets หรือ Environment Variables
-const DTC_USER = process.env.DTC_USER || 'your_username'; 
-const DTC_PASS = process.env.DTC_PASS || 'your_password';
+const DTC_USER = process.env.DTC_USER;
+const DTC_PASS = process.env.DTC_PASS;
 const EMAIL_USER = process.env.EMAIL_USER;
 const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Updated Step 6: Force CSV)...');
+    console.log('🚀 Starting Bot (Headless Mode for Server)...');
 
-    /*
+    // ตรวจสอบค่าตัวแปร (สำคัญมากเมื่อรันบน Server)
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
-        console.error('❌ Error: Secrets incomplete.');
-        process.exit(1);
+        console.error('❌ Error: Secrets incomplete. Please check your environment variables.');
+        // process.exit(1); // อาจจะ comment ไว้ก่อนถ้าอยากเทสแค่เปิด Browser
     }
-    */
 
     const downloadPath = path.join(__dirname, 'downloads');
     if (fs.existsSync(downloadPath)) fs.rmSync(downloadPath, { recursive: true, force: true });
@@ -30,21 +29,26 @@ const EMAIL_TO = process.env.EMAIL_TO;
     try {
         console.log('🖥️ Launching Browser...');
         browser = await puppeteer.launch({
-            headless: false, 
-            defaultViewport: null,
+            // *สำคัญ* ต้องใช้ 'new' หรือ true เมื่อรันบน Server/GitHub Actions
+            headless: 'new', 
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
                 '--disable-dev-shm-usage',
                 '--disable-gpu',
-                '--window-size=1366,768',
+                '--window-size=1920,1080', // กำหนดขนาดหน้าจอจำลองให้กว้างพอ
                 '--lang=th-TH,th'
             ]
         });
 
         page = await browser.newPage();
+        
+        // Timeout 5 นาที
         page.setDefaultNavigationTimeout(300000);
         page.setDefaultTimeout(300000);
+
+        // ตั้งค่าขนาดหน้าจอจำลอง
+        await page.setViewport({ width: 1920, height: 1080 });
 
         await page.emulateTimezone('Asia/Bangkok');
         const client = await page.target().createCDPSession();
@@ -57,8 +61,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await page.goto('https://gps.dtc.co.th/v2/login', { waitUntil: 'domcontentloaded' });
         
         await page.waitForSelector('#Username', { visible: true });
-        await page.type('#Username', DTC_USER);
-        await page.type('#password1 > input', DTC_PASS);
+        await page.type('#Username', DTC_USER || 'TEST_USER'); // fallback กัน error
+        await page.type('#password1 > input', DTC_PASS || 'TEST_PASS');
         
         console.log('   Clicking Login...');
         await page.evaluate(() => {
@@ -66,6 +70,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
             if (btn) btn.click();
         });
         
+        // รอจนกว่าจะเข้าหน้า Dashboard หรือหน้า Login หายไป
         await page.waitForFunction(() => !document.querySelector('#Username'), { timeout: 90000 });
         console.log('✅ Login Success');
 
@@ -81,6 +86,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('3️⃣ Step 3: Fill Form...');
 
         const speedInputSelector = 'div:nth-of-type(8) input'; 
+        // รอเพิ่มขึ้นเผื่อ Server ช้า
         await page.waitForSelector(speedInputSelector, { visible: true, timeout: 60000 });
         await new Promise(r => setTimeout(r, 10000));
 
@@ -195,20 +201,14 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('6️⃣ Step 6: Exporting (CSV)...');
         
         // 1. คลิกปุ่ม Export Menu
-        // ใช้ selector แบบเดียวกับ recording: span:nth-of-type(1) svg
         console.log('   Clicking Export Menu...');
         try {
-            // พยายามหาปุ่ม Export แล้วคลิก
-            const exportMenuSelector = 'span:nth-of-type(1) svg'; // จาก Recording
-            
             // รอให้ปุ่มปรากฏ
-            await page.waitForSelector('.p-toolbar-group-right', { timeout: 10000 }).catch(() => {});
+            await page.waitForSelector('.p-toolbar-group-right', { timeout: 30000 }).catch(() => {});
 
             const menuClicked = await page.evaluate(() => {
-                // หาปุ่มใน Toolbar ขวา
                 const toolbar = document.querySelector('.p-toolbar-group-right, .flex.justify-content-end');
                 if (toolbar) {
-                    // หาปุ่มที่มี SVG หรือ button
                     const btn = toolbar.querySelector('button, div[role="button"]');
                     if (btn) { btn.click(); return true; }
                 }
@@ -216,7 +216,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
             });
             
             if (!menuClicked) {
-                // Fallback: ใช้ XPath ที่ใกล้เคียง Recording ที่สุด
                 const exBtn = await page.$x("//*[@id='pv_id_38' or contains(@id, 'pv_id_')]/div/svg");
                 if (exBtn.length > 0) await exBtn[0].click();
             }
@@ -224,7 +223,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         await new Promise(r => setTimeout(r, 10000)); // รอเมนูเด้ง
 
-        // 2. เลือก CSV (ยึดตาม Recording: ::-p-text(CSV))
+        // 2. เลือก CSV
         console.log('   Selecting CSV Option...');
         const csvSelected = await page.evaluate(() => {
             const items = document.querySelectorAll('li, span.p-menuitem-text');
@@ -247,10 +246,9 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('   Waiting for CSV file...');
         let finalFile = null;
 
-        for (let i = 0; i < 300; i++) {
+        for (let i = 0; i < 300; i++) { // รอสูงสุด 5 นาที
             await new Promise(r => setTimeout(r, 10000));
             const files = fs.readdirSync(downloadPath);
-            // มองหาไฟล์ .csv เป็นหลัก
             const target = files.find(f => f.endsWith('.csv') && !f.endsWith('.crdownload'));
             if (target) {
                 finalFile = target;
@@ -285,6 +283,13 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
     } catch (error) {
         console.error('❌ FATAL ERROR:', error);
+        // เก็บ Screenshot เมื่อ Error (สำคัญสำหรับ Debug บน Server)
+        if (page && !page.isClosed()) {
+            try { 
+                await page.screenshot({ path: path.join(downloadPath, 'error_screenshot.png'), fullPage: true });
+                console.log('📸 Error screenshot saved to downloads/error_screenshot.png');
+            } catch(e){}
+        }
         if (browser) await browser.close();
         process.exit(1);
     }
