@@ -125,7 +125,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         } catch(e) {}
         
         if (!isFormReady) {
-            console.log('   Form input not found. Selecting "Overspeed" from dropdown...');
+            console.log('   Form input not found. Selecting "ความเร็วเกิน(กำหนดค่าเอง)" from dropdown...');
             
             try {
                 // 1. คลิกเปิด Dropdown
@@ -353,3 +353,4 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
