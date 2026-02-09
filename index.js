@@ -11,9 +11,9 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Server Mode + Fix Step 2 Timeout)...');
+    console.log('🚀 Starting Bot (Server Mode + Smart Step 2-3)...');
 
-    // ตรวจสอบค่าตัวแปร (สำคัญมากเมื่อรันบน Server)
+    // ตรวจสอบค่าตัวแปร
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
         console.error('❌ Error: Secrets incomplete. Please check your environment variables.');
         // process.exit(1); 
@@ -29,8 +29,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
     try {
         console.log('🖥️ Launching Browser...');
         browser = await puppeteer.launch({
-            // ✅ แก้ไข 1: ใช้ 'new' สำหรับรันบน Server
-            headless: 'new', 
+            headless: 'new', // ใช้ 'new' สำหรับ Server
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -46,11 +45,9 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // Timeout 5 นาที
         page.setDefaultNavigationTimeout(300000);
         page.setDefaultTimeout(300000);
-
-        // ตั้งค่าขนาดหน้าจอจำลอง
         await page.setViewport({ width: 1920, height: 1080 });
-
         await page.emulateTimezone('Asia/Bangkok');
+        
         const client = await page.target().createCDPSession();
         await client.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: downloadPath });
 
@@ -60,14 +57,10 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('1️⃣ Step 1: Login...');
         await page.goto('https://gps.dtc.co.th/v2/login', { waitUntil: 'networkidle2' });
         
-        // รอ Username และกรอก
         await page.waitForSelector('#Username', { visible: true });
         await page.type('#Username', DTC_USER || 'TEST_USER');
-        
-        // รอสักนิดก่อนกรอก Password
         await new Promise(r => setTimeout(r, 1000));
 
-        // ✅ แก้ไข 2: ใช้ Selector แบบกว้าง (input type password) แทน ID #password1 ที่อาจจะหาไม่เจอ
         try {
             console.log('   Typing Password...');
             const passwordSelector = 'input[type="password"]';
@@ -75,111 +68,94 @@ const EMAIL_TO = process.env.EMAIL_TO;
             await page.type(passwordSelector, DTC_PASS || 'TEST_PASS');
         } catch (e) {
             console.error('⚠️ Password field fallback...');
-            // ถ้าหา input type password ไม่เจอ ลองหาจาก ID เดิม
             await page.type('#password1 > input', DTC_PASS || 'TEST_PASS');
         }
         
         console.log('   Clicking Login...');
-        // ✅ แก้ไข 3: กดปุ่ม Login โดยอ้างอิงจาก HTML ที่คุณแนบมา (span.p-button-label text=เข้าสู่ระบบ)
         const loginSuccess = await page.evaluate(() => {
-            // หา span ที่มีคำว่า 'เข้าสู่ระบบ' และ class 'p-button-label'
             const spans = Array.from(document.querySelectorAll('span.p-button-label'));
             const loginSpan = spans.find(el => el.textContent.includes('เข้าสู่ระบบ'));
-            
-            if (loginSpan) {
-                loginSpan.click();
-                return true;
-            } else {
-                // Fallback: หาปุ่ม submit ทั่วไป
-                const btn = document.querySelector('button[type="submit"]');
-                if (btn) { btn.click(); return true; }
-            }
+            if (loginSpan) { loginSpan.click(); return true; }
+            const btn = document.querySelector('button[type="submit"]');
+            if (btn) { btn.click(); return true; }
             return false;
         });
 
-        if (!loginSuccess) console.log('⚠️ Login button click via JS might have failed, trying Puppeteer click...');
-
-        // รอจนกว่าหน้า Login จะเปลี่ยน (Username หายไป)
         await page.waitForFunction(() => !document.querySelector('#Username'), { timeout: 90000 });
         console.log('✅ Login Success');
 
         // ---------------------------------------------------------
-        // Step 2: Navigate to Report (Modified)
+        // Step 2: Navigate to Report (Modified Logic)
         // ---------------------------------------------------------
         console.log('2️⃣ Step 2: Go to Report Page...');
         
-        // ตัวแปร Selector สำหรับเช็คว่าเข้าหน้า Report สำเร็จ (ช่องกรอกความเร็ว)
-        const reportPageIndicator = 'div:nth-of-type(8) input'; 
-
-        // พยายามเข้าด้วย URL ก่อน (วิธีที่ 1)
-        try {
-            // ✅ แก้ไข: ใช้ 'domcontentloaded' แทน 'networkidle2' เพราะเว็บ GPS มี Data วิ่งตลอดทำให้ Timeout
-            await page.goto('https://gps.dtc.co.th/v2/report-main', { waitUntil: 'domcontentloaded', timeout: 60000 });
-        } catch (err) {
-            console.log('⚠️ Navigation command timed out (Normal for GPS sites), checking content...');
-        }
-
-        // เช็คว่าหน้าเว็บโหลดฟอร์มขึ้นมาหรือยัง
-        let arrived = false;
-        try {
-            await page.waitForSelector(reportPageIndicator, { visible: true, timeout: 10000 });
-            arrived = true;
-            console.log('✅ Report Page Loaded via URL');
-        } catch (e) {
-            console.log('⚠️ URL Navigation did not show form immediately.');
-        }
-
-        // ถ้ายังไม่เจอหน้า Report ให้ลองกดปุ่มเมนู "รายงานสถานะ" (วิธีที่ 2 - Fallback)
-        if (!arrived) {
-            console.log('🔄 Attempting to Click Sidebar Menu "รายงานสถานะ"...');
-            const menuClicked = await page.evaluate(() => {
-                // ค้นหาเมนูที่มีคำว่า "รายงานสถานะ"
-                const elements = Array.from(document.querySelectorAll('span, a, div, li'));
-                const target = elements.find(el => el.innerText && el.innerText.trim() === 'รายงานสถานะ');
-                if (target) {
-                    target.click();
-                    return true;
-                }
-                return false;
-            });
-
-            if (menuClicked) {
-                console.log('   Clicked Sidebar Menu. Waiting for form...');
-                await page.waitForSelector(reportPageIndicator, { visible: true, timeout: 60000 });
-                console.log('✅ Report Page Loaded via Click');
-            } else {
-                // ถ้าหาปุ่มไม่เจอ ลอง Screenshot ดู
-                 try { 
-                    await page.screenshot({ path: path.join(downloadPath, 'step2_failed.png'), fullPage: true });
-                } catch(e){}
-                throw new Error('❌ Failed to navigate to Report Page (URL and Click failed)');
-            }
-        }
+        // เราจะไม่รอ input field ที่ step นี้แล้ว เพราะมันอาจจะยังไม่ขึ้น
+        // เราจะรอแค่ "โครงสร้างหลัก" ของหน้า Report (เช่น Sidebar หรือ Main Container)
         
-        // ---------------------------------------------------------
-        // Step 3: Fill Form
-        // ---------------------------------------------------------
-        console.log('3️⃣ Step 3: Fill Form...');
-
-        const speedInputSelector = 'div:nth-of-type(8) input'; 
-        // รอเพิ่มขึ้นเผื่อ Server ช้า
-        await page.waitForSelector(speedInputSelector, { visible: true, timeout: 60000 });
-        await new Promise(r => setTimeout(r, 5000));
-
-        // 3.1 Report Type
-        console.log('   Selecting Report Type...');
         try {
-            await page.click('div.scroll-main div:nth-of-type(4) svg');
-            await new Promise(r => setTimeout(r, 2000));
-            
-            const reportOption = await page.$x("//span[contains(text(), 'ความเร็วเกิน(กำหนดค่าเอง)')]");
-            if (reportOption.length > 0) {
-                await reportOption[0].click();
-            } else {
-                await page.click('#pv_id_27_2 > span:nth-of-type(1)').catch(() => {});
-            }
-        } catch (e) { console.log('⚠️ Report type selection issue.'); }
+            // ใช้ domcontentloaded เพื่อให้เร็วขึ้น ไม่ต้องรอ network นิ่งสนิท
+            await page.goto('https://gps.dtc.co.th/v2/report-main/car-usage/status', { waitUntil: 'domcontentloaded', timeout: 60000 });
+        } catch (err) {
+            console.log('⚠️ Navigation timeout (Normal for GPS sites), checking page content...');
+        }
 
+        // รอให้แน่ใจว่าเข้ามาหน้า Report แล้วจริงๆ (เช็คจาก Sidebar หรือ Layout)
+        try {
+            // รอตัว container หลักของหน้าเว็บ
+            await page.waitForSelector('div.layout-main, div.layout-menu-container', { timeout: 20000 });
+            console.log('✅ Report Page Structure Loaded');
+        } catch (e) {
+            console.log('⚠️ Page structure wait failed, attempting Click Fallback...');
+            // Fallback: ถ้าเข้าไม่ได้ ให้ลองกดเมนู "รายงานสถานะ"
+            await page.evaluate(() => {
+                const elements = Array.from(document.querySelectorAll('span, a, div'));
+                const target = elements.find(el => el.innerText && el.innerText.trim() === 'รายงานสถานะ');
+                if (target) target.click();
+            });
+            await new Promise(r => setTimeout(r, 5000));
+        }
+
+        // ---------------------------------------------------------
+        // Step 3: Fill Form (Select Report Type First!)
+        // ---------------------------------------------------------
+        console.log('3️⃣ Step 3: Check & Fill Form...');
+        
+        const speedInputSelector = 'div:nth-of-type(8) input'; 
+        
+        // 3.0 เช็คว่ามีช่องกรอกความเร็วหรือยัง?
+        const isFormReady = await page.$(speedInputSelector);
+        
+        if (!isFormReady) {
+            console.log('   Form input not found. Selecting "Overspeed" from dropdown...');
+            
+            // พยายามคลิก Dropdown เพื่อเลือกรายงาน (ตาม Recording ของคุณ)
+            try {
+                // Selector สำหรับ Dropdown เลือกรายงาน
+                const dropdownTrigger = 'div.scroll-main div:nth-of-type(4) svg, div.p-dropdown-trigger'; 
+                await page.waitForSelector(dropdownTrigger, { timeout: 10000 });
+                await page.click(dropdownTrigger);
+                
+                await new Promise(r => setTimeout(r, 1000));
+                
+                // เลือก "ความเร็วเกิน(กำหนดค่าเอง)"
+                const reportOption = await page.$x("//span[contains(text(), 'ความเร็วเกิน(กำหนดค่าเอง)')]");
+                if (reportOption.length > 0) {
+                    await reportOption[0].click();
+                    console.log('   Clicked "Overspeed" option.');
+                } else {
+                    console.log('⚠️ Could not find "Overspeed" text option.');
+                }
+            } catch (e) {
+                console.log('⚠️ Error selecting report type:', e.message);
+            }
+        } else {
+            console.log('   Form input already visible.');
+        }
+
+        // 3.1 รอให้ฟอร์มโหลดจริงๆ (ตอนนี้ควรจะมาแล้ว)
+        console.log('   Waiting for Speed Input field...');
+        await page.waitForSelector(speedInputSelector, { visible: true, timeout: 60000 });
+        
         // 3.2 Vehicle Group
         console.log('   Selecting Vehicle Group...');
         try {
@@ -279,9 +255,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // 1. คลิกปุ่ม Export Menu
         console.log('   Clicking Export Menu...');
         try {
-            // รอให้ปุ่มปรากฏ
             await page.waitForSelector('.p-toolbar-group-right', { timeout: 30000 }).catch(() => {});
-
             const menuClicked = await page.evaluate(() => {
                 const toolbar = document.querySelector('.p-toolbar-group-right, .flex.justify-content-end');
                 if (toolbar) {
@@ -290,7 +264,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
                 }
                 return false;
             });
-            
             if (!menuClicked) {
                 const exBtn = await page.$x("//*[@id='pv_id_38' or contains(@id, 'pv_id_')]/div/svg");
                 if (exBtn.length > 0) await exBtn[0].click();
@@ -322,14 +295,11 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('   Waiting for CSV file...');
         let finalFile = null;
 
-        for (let i = 0; i < 300; i++) { // รอสูงสุด 5 นาที
+        for (let i = 0; i < 300; i++) { 
             await new Promise(r => setTimeout(r, 1000));
             const files = fs.readdirSync(downloadPath);
             const target = files.find(f => f.endsWith('.csv') && !f.endsWith('.crdownload'));
-            if (target) {
-                finalFile = target;
-                break;
-            }
+            if (target) { finalFile = target; break; }
             if (i > 0 && i % 30 === 0) console.log(`   ...still waiting (${i}s)`);
         }
 
@@ -359,7 +329,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
     } catch (error) {
         console.error('❌ FATAL ERROR:', error);
-        // เก็บ Screenshot เมื่อ Error (สำคัญสำหรับ Debug บน Server)
         if (page && !page.isClosed()) {
             try { 
                 await page.screenshot({ path: path.join(downloadPath, 'error_screenshot.png'), fullPage: true });
@@ -370,4 +339,3 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
-
