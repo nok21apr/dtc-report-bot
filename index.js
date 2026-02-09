@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Step 3: ARIA Label & Date Logic Update)...');
+    console.log('🚀 Starting Bot (Step 2-3: Fix Navigation Flow & New Tab)...');
 
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
         console.error('❌ Error: Secrets incomplete. Please check your environment variables.');
@@ -79,39 +79,74 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('✅ Login Success');
 
         // ---------------------------------------------------------
-        // Step 2: Navigate to Report
+        // Step 2: Click "Report" Icon (Opens New Tab)
         // ---------------------------------------------------------
-        console.log('2️⃣ Step 2: Go to Report Page...');
-        try {
-            await page.goto('https://gps.dtc.co.th/v2/report-main/car-usage/status', { waitUntil: 'domcontentloaded', timeout: 60000 });
-        } catch (err) {
-            console.log('⚠️ Navigation timeout, checking page content...');
-        }
-
-        try {
-            await page.waitForSelector('div.layout-main, div.layout-menu-container', { timeout: 20000 });
-            console.log('✅ Report Page Structure Loaded');
-        } catch (e) {
-            console.log('⚠️ Page structure wait failed, attempting Click Fallback...');
-            await page.evaluate(() => {
-                const elements = Array.from(document.querySelectorAll('span, a, div'));
-                const target = elements.find(el => el.innerText && el.innerText.trim() === 'รายงานสถานะ');
-                if (target) target.click();
-            });
-            await new Promise(r => setTimeout(r, 5000));
-        }
-
-        // ---------------------------------------------------------
-        // Step 3: Fill Form (Updated Logic)
-        // ---------------------------------------------------------
-        console.log('3️⃣ Step 3: Check & Fill Form...');
+        console.log('2️⃣ Step 2: Clicking Report Icon...');
         
+        // รอให้หน้า Dashboard โหลดและปุ่ม Report ปรากฏ
+        // Selector: img src="...report02.svg"
+        const reportIconSelector = 'img[src*="report02.svg"]';
+        await page.waitForSelector(reportIconSelector, { visible: true, timeout: 60000 });
+        
+        // เตรียมจับ Tab ใหม่ที่จะเด้งขึ้นมา
+        const newPagePromise = new Promise(x => browser.once('targetcreated', target => x(target.page())));
+        
+        // คลิกปุ่มรายงาน
+        await page.click(reportIconSelector);
+        console.log('   Clicked Report Icon. Waiting for new tab...');
+
+        // สลับไปใช้ page object ของ Tab ใหม่
+        const reportPage = await newPagePromise;
+        if (!reportPage) throw new Error('❌ New tab did not open or failed to capture.');
+        
+        // ตั้งค่าให้กับ Page ใหม่
+        await reportPage.bringToFront();
+        await reportPage.setViewport({ width: 1920, height: 1080 });
+        // ต้องตั้ง Download Path ให้ Tab ใหม่ด้วย
+        const clientNew = await reportPage.target().createCDPSession();
+        await clientNew.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: downloadPath });
+        
+        // รอให้หน้า Main Report โหลดเสร็จ
+        await reportPage.waitForNetworkIdle({ idleTime: 500, timeout: 60000 }).catch(() => {});
+        console.log('✅ Switched to Report Tab.');
+
+        // ---------------------------------------------------------
+        // Step 3: Click "Status Report" (รายงานสถานะ)
+        // ---------------------------------------------------------
+        console.log('3️⃣ Step 3: Clicking "Status Report"...');
+        
+        // ค้นหาเมนู "รายงานสถานะ"
+        const statusMenuXPath = "//span[contains(text(), 'รายงานสถานะ')]";
+        await reportPage.waitForXPath(statusMenuXPath, { visible: true, timeout: 30000 });
+        const [statusBtn] = await reportPage.$x(statusMenuXPath);
+        
+        if (statusBtn) {
+            await statusBtn.click();
+            console.log('   Clicked "Status Report" menu.');
+        } else {
+            throw new Error('❌ Menu "รายงานสถานะ" not found.');
+        }
+
+        // รอให้เปลี่ยนหน้าไปที่ URL .../car-usage/status
+        try {
+            await reportPage.waitForFunction("window.location.href.includes('car-usage/status')", { timeout: 60000 });
+            console.log('✅ Arrived at Status Report Page.');
+        } catch (e) {
+            console.log('⚠️ URL check timeout, checking content directly...');
+        }
+
+        // ---------------------------------------------------------
+        // Step 4 & 5: Fill Form (On reportPage)
+        // ---------------------------------------------------------
+        console.log('4️⃣ Step 4 & 5: Check & Fill Form...');
+        
+        // ใช้ reportPage แทน page ตั้งแต่จุดนี้เป็นต้นไป
         const speedInputSelector = 'div:nth-of-type(8) input'; 
         
-        // 3.0 Report Type: "ความเร็วเกิน(กำหนดค่าเอง)"
+        // 4.1 เลือก Report Type: "ความเร็วเกิน(กำหนดค่าเอง)"
         let isFormReady = false;
         try {
-            await page.waitForSelector(speedInputSelector, { visible: true, timeout: 5000 });
+            await reportPage.waitForSelector(speedInputSelector, { visible: true, timeout: 5000 });
             isFormReady = true;
         } catch(e) {}
         
@@ -119,21 +154,18 @@ const EMAIL_TO = process.env.EMAIL_TO;
             console.log('   Form input not found. Selecting Report Type...');
             try {
                 // 1. คลิกเปิด Dropdown (Trigger)
-                // เราจะหา div ที่มี class p-dropdown ซึ่งน่าจะเป็นตัวเลือกประเภทรายงาน (มักอยู่ตัวแรกๆ หรือตัวที่ 4 ใน layout)
                 const dropdownTrigger = 'div.scroll-main div.p-dropdown, div.scroll-main div:nth-of-type(4)'; 
-                await page.waitForSelector(dropdownTrigger, { timeout: 10000 });
-                await page.click(dropdownTrigger);
+                await reportPage.waitForSelector(dropdownTrigger, { timeout: 10000 });
+                await reportPage.click(dropdownTrigger);
                 console.log('   Clicked Report Dropdown Trigger');
                 
                 await new Promise(r => setTimeout(r, 1000));
 
                 // 2. เลือก Item จาก aria-label
                 const reportOptionSelector = 'li[aria-label="ความเร็วเกิน(กำหนดค่าเอง)"]';
-                console.log(`   Clicking option: ${reportOptionSelector}`);
-                
-                await page.waitForSelector(reportOptionSelector, { visible: true, timeout: 5000 });
-                await page.click(reportOptionSelector);
-                console.log('   Selected Report Type successfully.');
+                await reportPage.waitForSelector(reportOptionSelector, { visible: true, timeout: 5000 });
+                await reportPage.click(reportOptionSelector);
+                console.log('   Selected Report Type: ความเร็วเกิน(กำหนดค่าเอง)');
                 
             } catch (e) {
                 console.log('⚠️ Error selecting report type:', e.message);
@@ -143,72 +175,54 @@ const EMAIL_TO = process.env.EMAIL_TO;
             console.log('   Form input already visible.');
         }
 
-        // 3.1 รอให้ฟอร์มโหลด
+        // รอฟอร์มโหลด
         console.log('   Waiting for Speed Input field...');
-        await page.waitForSelector(speedInputSelector, { visible: true, timeout: 60000 });
+        await reportPage.waitForSelector(speedInputSelector, { visible: true, timeout: 60000 });
         
-        // 3.2 Vehicle Group: "กลุ่มทั้งหมด"
+        // 4.2 Vehicle Group: "กลุ่มทั้งหมด"
         console.log('   Selecting Vehicle Group...');
         try {
             await new Promise(r => setTimeout(r, 1000));
-            
-            // 1. คลิกเปิด Dropdown (ถัดจาก Report Type)
             const groupTrigger = 'div:nth-of-type(5) > div.flex-column span, div:nth-of-type(5) .p-dropdown';
-            await page.click(groupTrigger);
+            await reportPage.click(groupTrigger);
             await new Promise(r => setTimeout(r, 1000));
 
-            // 2. เลือก Item จาก aria-label
             const groupOptionSelector = 'li[aria-label="กลุ่มทั้งหมด"]';
-            console.log(`   Clicking group option: ${groupOptionSelector}`);
-            
-            await page.waitForSelector(groupOptionSelector, { visible: true, timeout: 5000 });
-            await page.click(groupOptionSelector);
+            await reportPage.waitForSelector(groupOptionSelector, { visible: true, timeout: 5000 });
+            await reportPage.click(groupOptionSelector);
             console.log('   Selected Group "กลุ่มทั้งหมด"');
-
         } catch (e) { console.log('⚠️ Skipping Group Selection / Error: ' + e.message); }
 
-        // 3.3 Select All Vehicles
+        // 4.3 Select All Vehicles
         console.log('   Selecting All Vehicles...');
-        // คลิกเปิด MultiSelect
         const vehicleSelectSelector = 'div.p-multiselect-label-container';
-        await page.waitForSelector(vehicleSelectSelector);
-        await page.click(vehicleSelectSelector);
+        await reportPage.waitForSelector(vehicleSelectSelector);
+        await reportPage.click(vehicleSelectSelector);
         await new Promise(r => setTimeout(r, 1000));
 
-        // คลิก Checkbox "Select All"
-        // ใช้ Selector ที่เจาะจงไปที่ Input ใน Header ตามที่คุณให้มา
-        // แต่ Puppeteer มักจะคลิกที่ตัว div.p-checkbox container แทน input โดยตรงเพื่อให้ event ทำงาน
         const selectAllContainer = 'div.p-multiselect-header div.p-checkbox';
-        
-        console.log(`   Clicking Select All Checkbox: ${selectAllContainer}`);
         try {
-            await page.waitForSelector(selectAllContainer, { visible: true, timeout: 5000 });
-            await page.click(selectAllContainer);
+            await reportPage.waitForSelector(selectAllContainer, { visible: true, timeout: 5000 });
+            await reportPage.click(selectAllContainer);
             console.log('   Clicked Select All Checkbox.');
-        } catch (e) {
-            console.log('⚠️ Select All Checkbox not found.');
-        }
+        } catch (e) { console.log('⚠️ Select All Checkbox not found.'); }
         
-        await page.keyboard.press('Escape');
+        await reportPage.keyboard.press('Escape');
 
-        // 3.4 Date Range (Updated Logic)
+        // 4.4 Date Range (Last day of prev month (-2 days) to Last day of current month)
         console.log('   Setting Date Range...');
-        
-        // Logic: วันสุดท้ายของเดือนก่อนหน้า ถอยหลังไป 2 วัน จนถึง วันสุดท้ายของเดือนปัจจุบัน
-        // Start Date Calculation:
         const now = new Date();
         const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth(); // 0-11
+        const currentMonth = now.getMonth(); 
         
-        // หาวันที่ 1 ของเดือนปัจจุบัน แล้วลบออก 2 วัน จะได้วันตามที่ต้องการ (เช่น 1 Feb - 2 days = 30 Jan)
+        // Start: 1st of current month - 2 days (Matches user example 30/01 for a Feb run)
         const startDate = new Date(currentYear, currentMonth, 1);
         startDate.setDate(startDate.getDate() - 2); 
         
-        // End Date Calculation: วันสุดท้ายของเดือนปัจจุบัน
-        const endDate = new Date(currentYear, currentMonth + 1, 0); // วันที่ 0 ของเดือนถัดไป = วันสุดท้ายของเดือนปัจจุบัน
+        // End: Last day of current month
+        const endDate = new Date(currentYear, currentMonth + 1, 0); 
         
         const pad = (n) => n < 10 ? '0' + n : n;
-        
         const formatDateTime = (date, isEnd = false) => {
             const d = pad(date.getDate());
             const m = pad(date.getMonth() + 1);
@@ -220,65 +234,53 @@ const EMAIL_TO = process.env.EMAIL_TO;
         const startDateStr = formatDateTime(startDate, false);
         const endDateStr = formatDateTime(endDate, true);
         const fullDateString = `${startDateStr} - ${endDateStr}`;
-        
-        console.log(`      Calculated Date: ${fullDateString}`);
+        console.log(`      Date: ${fullDateString}`);
 
         const dateInputSelector = 'div:nth-of-type(7) input';
-        await page.click(dateInputSelector, { clickCount: 3 });
-        await page.keyboard.press('Backspace');
-        await page.type(dateInputSelector, fullDateString, { delay: 10 });
-        await page.keyboard.press('Tab');
+        await reportPage.click(dateInputSelector, { clickCount: 3 });
+        await reportPage.keyboard.press('Backspace');
+        await reportPage.type(dateInputSelector, fullDateString, { delay: 10 });
+        await reportPage.keyboard.press('Tab');
 
-        // 3.5 Speed
+        // 4.5 Speed
         console.log('   Setting Speed 55...');
-        await page.click(speedInputSelector, { clickCount: 3 });
-        await page.type(speedInputSelector, '55');
+        await reportPage.click(speedInputSelector, { clickCount: 3 });
+        await reportPage.type(speedInputSelector, '55');
 
-        // 3.6 Duration
+        // 4.6 Duration
         console.log('   Setting Duration 1 min...');
         const durationInputSelector = 'div:nth-of-type(9) div.align-items-center > input';
-        if (await page.$(durationInputSelector)) {
-            await page.click(durationInputSelector, { clickCount: 3 });
-            await page.type(durationInputSelector, '1');
+        if (await reportPage.$(durationInputSelector)) {
+            await reportPage.click(durationInputSelector, { clickCount: 3 });
+            await reportPage.type(durationInputSelector, '1');
         }
 
         // ---------------------------------------------------------
-        // Step 4: Search
+        // Step 5: Search & Export
         // ---------------------------------------------------------
-        console.log('4️⃣ Step 4: Search...');
-        const searchBtnXPath = "//*[@id='app']/div/main/div[2]/div/div[2]/div[2]/div/div/div[4]/button[2]";
-        const searchBtn = await page.$x(searchBtnXPath);
+        console.log('5️⃣ Step 5: Search & Export...');
         
+        // Search Button
+        const searchBtnXPath = "//*[@id='app']/div/main/div[2]/div/div[2]/div[2]/div/div/div[4]/button[2]";
+        const searchBtn = await reportPage.$x(searchBtnXPath);
         if (searchBtn.length > 0) {
             await searchBtn[0].click();
         } else {
-            await page.evaluate(() => {
+            await reportPage.evaluate(() => {
                  const buttons = document.querySelectorAll('button');
                  if(buttons.length > 0) buttons[buttons.length - 1].click();
             });
         }
 
-        // ---------------------------------------------------------
-        // Step 5: Wait for Data
-        // ---------------------------------------------------------
-        console.log('⏳ Step 5: Waiting for Data...');
-        try {
-            await page.waitForFunction(() => {
-                return document.querySelectorAll('button').length > 0;
-            }, { timeout: 300000 });
-            await new Promise(r => setTimeout(r, 10000));
-        } catch (e) {
-            console.log('⚠️ Wait timeout, trying to proceed anyway...');
-        }
+        // Wait for Data
+        console.log('   Waiting for Data...');
+        await new Promise(r => setTimeout(r, 10000)); // Hard wait for grid load
 
-        // ---------------------------------------------------------
-        // Step 6: Export & Download
-        // ---------------------------------------------------------
-        console.log('6️⃣ Step 6: Exporting (CSV)...');
+        // Export
         console.log('   Clicking Export Menu...');
         try {
-            await page.waitForSelector('.p-toolbar-group-right', { timeout: 30000 }).catch(() => {});
-            const menuClicked = await page.evaluate(() => {
+            await reportPage.waitForSelector('.p-toolbar-group-right', { timeout: 30000 }).catch(() => {});
+            const menuClicked = await reportPage.evaluate(() => {
                 const toolbar = document.querySelector('.p-toolbar-group-right, .flex.justify-content-end');
                 if (toolbar) {
                     const btn = toolbar.querySelector('button, div[role="button"]');
@@ -287,16 +289,16 @@ const EMAIL_TO = process.env.EMAIL_TO;
                 return false;
             });
             if (!menuClicked) {
-                const exBtn = await page.$x("//*[@id='pv_id_38' or contains(@id, 'pv_id_')]/div/svg");
+                const exBtn = await reportPage.$x("//*[@id='pv_id_38' or contains(@id, 'pv_id_')]/div/svg");
                 if (exBtn.length > 0) await exBtn[0].click();
             }
         } catch (e) { console.log('⚠️ Export Menu Click Failed'); }
 
-        await new Promise(r => setTimeout(r, 5000));
+        await new Promise(r => setTimeout(r, 2000));
 
-        // เลือก CSV
+        // Select CSV
         console.log('   Selecting CSV Option...');
-        const csvSelected = await page.evaluate(() => {
+        const csvSelected = await reportPage.evaluate(() => {
             const items = document.querySelectorAll('li, span.p-menuitem-text');
             for (let item of items) {
                 if (item.innerText.trim() === 'CSV') {
@@ -308,11 +310,11 @@ const EMAIL_TO = process.env.EMAIL_TO;
         });
 
         if (!csvSelected) {
-            const csvBtn = await page.$x("//span[contains(text(), 'CSV')]");
+            const csvBtn = await reportPage.$x("//span[contains(text(), 'CSV')]");
             if (csvBtn.length > 0) await csvBtn[0].click();
         }
 
-        // รอไฟล์ CSV
+        // Wait for File
         console.log('   Waiting for CSV file...');
         let finalFile = null;
         for (let i = 0; i < 300; i++) { 
@@ -327,10 +329,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log(`✅ File Downloaded: ${finalFile}`);
         await browser.close();
 
-        // ---------------------------------------------------------
-        // Step 7: Email
-        // ---------------------------------------------------------
-        console.log('📧 Step 7: Sending Email...');
+        // Email
+        console.log('📧 Sending Email...');
         const transporter = nodemailer.createTransport({
             service: 'gmail',
             auth: { user: EMAIL_USER, pass: EMAIL_PASS }
@@ -350,8 +350,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.error('❌ FATAL ERROR:', error);
         if (page && !page.isClosed()) {
             try { 
-                await page.screenshot({ path: path.join(downloadPath, 'error_screenshot.png'), fullPage: true });
-                console.log('📸 Error screenshot saved to downloads/error_screenshot.png');
+                // Capture screenshot on error (try both pages)
+                await page.screenshot({ path: path.join(downloadPath, 'error_screenshot_login.png'), fullPage: true });
             } catch(e){}
         }
         if (browser) await browser.close();
