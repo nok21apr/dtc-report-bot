@@ -114,7 +114,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // พยายามเข้าด้วย URL ก่อน (วิธีที่ 1)
         try {
             // ✅ แก้ไข: ใช้ 'domcontentloaded' แทน 'networkidle2' เพราะเว็บ GPS มี Data วิ่งตลอดทำให้ Timeout
-            await page.goto('https://gps.dtc.co.th/v2/report-main/car-usage/status', { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await page.goto('https://gps.dtc.co.th/v2/report-main', { waitUntil: 'domcontentloaded', timeout: 60000 });
         } catch (err) {
             console.log('⚠️ Navigation command timed out (Normal for GPS sites), checking content...');
         }
@@ -370,3 +370,4 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
