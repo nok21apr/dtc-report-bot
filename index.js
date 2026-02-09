@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Server Mode + Smart Step 2-3)...');
+    console.log('🚀 Starting Bot (Server Mode + Fix Dropdown Selection)...');
 
     // ตรวจสอบค่าตัวแปร
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
@@ -89,11 +89,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // ---------------------------------------------------------
         console.log('2️⃣ Step 2: Go to Report Page...');
         
-        // เราจะไม่รอ input field ที่ step นี้แล้ว เพราะมันอาจจะยังไม่ขึ้น
-        // เราจะรอแค่ "โครงสร้างหลัก" ของหน้า Report (เช่น Sidebar หรือ Main Container)
-        
         try {
-            // ใช้ domcontentloaded เพื่อให้เร็วขึ้น ไม่ต้องรอ network นิ่งสนิท
+            // ใช้ domcontentloaded เพื่อให้เร็วขึ้น
             await page.goto('https://gps.dtc.co.th/v2/report-main/car-usage/status', { waitUntil: 'domcontentloaded', timeout: 60000 });
         } catch (err) {
             console.log('⚠️ Navigation timeout (Normal for GPS sites), checking page content...');
@@ -101,12 +98,10 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         // รอให้แน่ใจว่าเข้ามาหน้า Report แล้วจริงๆ (เช็คจาก Sidebar หรือ Layout)
         try {
-            // รอตัว container หลักของหน้าเว็บ
             await page.waitForSelector('div.layout-main, div.layout-menu-container', { timeout: 20000 });
             console.log('✅ Report Page Structure Loaded');
         } catch (e) {
             console.log('⚠️ Page structure wait failed, attempting Click Fallback...');
-            // Fallback: ถ้าเข้าไม่ได้ ให้ลองกดเมนู "รายงานสถานะ"
             await page.evaluate(() => {
                 const elements = Array.from(document.querySelectorAll('span, a, div'));
                 const target = elements.find(el => el.innerText && el.innerText.trim() === 'รายงานสถานะ');
@@ -116,43 +111,62 @@ const EMAIL_TO = process.env.EMAIL_TO;
         }
 
         // ---------------------------------------------------------
-        // Step 3: Fill Form (Select Report Type First!)
+        // Step 3: Fill Form (Updated Selector Logic)
         // ---------------------------------------------------------
         console.log('3️⃣ Step 3: Check & Fill Form...');
         
         const speedInputSelector = 'div:nth-of-type(8) input'; 
         
         // 3.0 เช็คว่ามีช่องกรอกความเร็วหรือยัง?
-        const isFormReady = await page.$(speedInputSelector);
+        let isFormReady = false;
+        try {
+            await page.waitForSelector(speedInputSelector, { visible: true, timeout: 5000 });
+            isFormReady = true;
+        } catch(e) {}
         
         if (!isFormReady) {
             console.log('   Form input not found. Selecting "Overspeed" from dropdown...');
             
-            // พยายามคลิก Dropdown เพื่อเลือกรายงาน (ตาม Recording ของคุณ)
             try {
-                // Selector สำหรับ Dropdown เลือกรายงาน
-                const dropdownTrigger = 'div.scroll-main div:nth-of-type(4) svg, div.p-dropdown-trigger'; 
+                // 1. คลิกเปิด Dropdown
+                // ใช้ Selector สำหรับตัวเปิด Dropdown (Trigger)
+                const dropdownTrigger = 'div.scroll-main div:nth-of-type(4)'; 
                 await page.waitForSelector(dropdownTrigger, { timeout: 10000 });
                 await page.click(dropdownTrigger);
+                console.log('   Clicked Dropdown Trigger');
                 
-                await new Promise(r => setTimeout(r, 1000));
+                await new Promise(r => setTimeout(r, 2000)); // รอ Animation ของ Dropdown
                 
-                // เลือก "ความเร็วเกิน(กำหนดค่าเอง)"
-                const reportOption = await page.$x("//span[contains(text(), 'ความเร็วเกิน(กำหนดค่าเอง)')]");
-                if (reportOption.length > 0) {
-                    await reportOption[0].click();
-                    console.log('   Clicked "Overspeed" option.');
-                } else {
-                    console.log('⚠️ Could not find "Overspeed" text option.');
-                }
+                // 2. เลือก Item ตาม HTML ที่ User ให้มา: <li aria-label="ความเร็วเกิน(กำหนดค่าเอง)">
+                const optionSelector = 'li[aria-label="ความเร็วเกิน(กำหนดค่าเอง)"]';
+                console.log(`   Clicking option: ${optionSelector}`);
+                
+                // รอและคลิกที่ตัวเลือก
+                await page.waitForSelector(optionSelector, { visible: true, timeout: 5000 });
+                await page.click(optionSelector);
+                console.log('   Clicked "Overspeed" option successfully.');
+                
             } catch (e) {
-                console.log('⚠️ Error selecting report type:', e.message);
+                console.log('⚠️ Error selecting report type (Method 1):', e.message);
+                // Fallback: ลองหาด้วย Text ถ้า Method แรกพลาด
+                try {
+                     await page.evaluate(() => {
+                        const items = document.querySelectorAll('li.p-dropdown-item');
+                        for (const item of items) {
+                            if (item.innerText.includes('ความเร็วเกิน(กำหนดค่าเอง)')) {
+                                item.click();
+                                return;
+                            }
+                        }
+                    });
+                    console.log('   Clicked via Text Fallback');
+                } catch(err) { console.log('⚠️ Fallback failed'); }
             }
         } else {
             console.log('   Form input already visible.');
         }
 
-        // 3.1 รอให้ฟอร์มโหลดจริงๆ (ตอนนี้ควรจะมาแล้ว)
+        // 3.1 รอให้ฟอร์มโหลดจริงๆ (ตอนนี้ควรจะมาแล้วหลังจากเลือก)
         console.log('   Waiting for Speed Input field...');
         await page.waitForSelector(speedInputSelector, { visible: true, timeout: 60000 });
         
