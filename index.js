@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Step 3.3: Spacebar Method)...');
+    console.log('🚀 Starting Bot (Step 3.3: Tab Navigation Sequence)...');
 
     /*
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
@@ -168,8 +168,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
             console.log('   Selected: กลุ่มทั้งหมด');
         } catch (e) { console.log('⚠️ Group selection skipped/failed: ' + e.message); }
 
-        // --- 3.3 เลือกรถ (Checkbox All) - SPACEBAR METHOD ---
-        console.log('   Selecting All Vehicles (Spacebar Method)...');
+        // --- 3.3 เลือกรถ (Checkbox All) - TAB & SPACE SEQUENCE ---
+        console.log('   Selecting All Vehicles (Tab Sequence Method)...');
         try {
             // 1. คลิกเปิด Dropdown (กรุณาเลือกรถ)
             const vehicleSelectSelector = 'div.p-multiselect-label-container';
@@ -177,42 +177,19 @@ const EMAIL_TO = process.env.EMAIL_TO;
             await page.click(vehicleSelectSelector);
             console.log('   Opened Vehicle Multiselect.');
             
-            await new Promise(r => setTimeout(r, 1000));
+            await new Promise(r => setTimeout(r, 1000)); // รอ Animation
 
-            // 2. เช็คสถานะและกด Spacebar
-            const checkboxWrapperSelector = 'div.p-multiselect-header > div.p-checkbox';
-            const checkboxInputSelector = 'div.p-multiselect-header > div.p-checkbox > input';
+            // 2. ส่งคำสั่ง Tab 3 ครั้ง แล้วกด Space
+            // ลำดับการกดตาม Code ที่ User ให้มา: Tab -> Tab -> Tab -> Space
+            console.log('   Performing Keyboard Navigation (Tab x 3 -> Space)...');
             
-            // รอให้ปุ่มปรากฏ
-            await page.waitForSelector(checkboxWrapperSelector, { visible: true, timeout: 5000 });
-
-            // ตรวจสอบว่าติ๊กอยู่แล้วหรือไม่
-            const isChecked = await page.evaluate((inputSel, wrapperSel) => {
-                const input = document.querySelector(inputSel);
-                const wrapper = document.querySelector(wrapperSel);
-                if (input && (input.checked || input.getAttribute('aria-label') === 'All items selected')) return true;
-                if (wrapper && wrapper.classList.contains('p-highlight')) return true;
-                return false;
-            }, checkboxInputSelector, checkboxWrapperSelector);
-
-            if (isChecked) {
-                console.log('   Checkbox ALREADY selected. Skipping.');
-            } else {
-                console.log('   Checkbox NOT selected. Pressing Spacebar...');
-                
-                // พยายาม Focus ไปที่ checkbox wrapper
-                // (บางครั้ง input ซ่อนอยู่ focus ไม่ได้ ต้อง focus ที่ wrapper)
-                try {
-                    await page.focus(checkboxWrapperSelector);
-                } catch (e) {
-                    // Fallback: ถ้า focus wrapper ไม่ได้ ลอง focus input
-                    await page.focus(checkboxInputSelector).catch(() => {});
-                }
-                
-                // กด Spacebar
-                await page.keyboard.press('Space');
-                console.log('   Pressed Spacebar.');
+            for(let i=0; i<3; i++) {
+                await page.keyboard.press('Tab');
+                await new Promise(r => setTimeout(r, 200));
             }
+            
+            await page.keyboard.press('Space');
+            console.log('   Pressed Space (to Select All).');
             
         } catch (e) {
             console.log('⚠️ Checkbox selection error: ' + e.message);
