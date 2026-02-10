@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Fix Checkbox State Logic)...');
+    console.log('🚀 Starting Bot (Simple Click Flow for Vehicles)...');
 
     /*
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
@@ -139,7 +139,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
                 }
             } catch (e) {
                 console.error('⚠️ Error selecting report type:', e.message);
-                // Attempt blind click
                 try {
                      const opt = await page.$x("//li//span[contains(text(), 'ความเร็วเกิน')]");
                      if(opt.length > 0) await opt[0].click();
@@ -169,47 +168,23 @@ const EMAIL_TO = process.env.EMAIL_TO;
             console.log('   Selected: กลุ่มทั้งหมด');
         } catch (e) { console.log('⚠️ Group selection skipped/failed: ' + e.message); }
 
-        // --- 3.3 เลือกรถ (Checkbox All) - UPDATED LOGIC ---
-        console.log('   Selecting All Vehicles (Smart Check)...');
+        // --- 3.3 เลือกรถ (Checkbox All) - SIMPLE CLICK FLOW ---
+        console.log('   Selecting All Vehicles...');
         try {
-            // 1. คลิกเปิด Dropdown
-            const vehicleSelectTrigger = 'div.p-multiselect-label-container > div';
-            await page.waitForSelector(vehicleSelectTrigger, { visible: true, timeout: 5000 });
-            await page.click(vehicleSelectTrigger);
+            // 1. คลิกเปิด Dropdown (กรุณาเลือกรถ)
+            const vehicleSelectSelector = 'div.p-multiselect-label-container';
+            await page.waitForSelector(vehicleSelectSelector, { visible: true, timeout: 5000 });
+            await page.click(vehicleSelectSelector);
             console.log('   Opened Vehicle Multiselect.');
             
             await new Promise(r => setTimeout(r, 1000));
 
-            // 2. ตรวจสอบสถานะก่อนคลิก
-            // Selector: div header -> checkbox wrapper -> input
-            const headerCheckboxSelector = 'div.p-multiselect-header .p-checkbox';
-            const headerInputSelector = 'div.p-multiselect-header .p-checkbox input';
-
-            await page.waitForSelector(headerCheckboxSelector, { visible: true, timeout: 5000 });
-
-            // เช็คว่ามัน Checked อยู่แล้วหรือไม่?
-            const isChecked = await page.evaluate((inputSel, wrapperSel) => {
-                const input = document.querySelector(inputSel);
-                const wrapper = document.querySelector(wrapperSel);
-                
-                // ถ้า Input มี attribute checked หรือ aria-label เป็น Selected
-                if (input && (input.checked || input.getAttribute('aria-label') === 'All items selected')) {
-                    return true;
-                }
-                // บางที PrimeVue ใส่ class highlight ไว้ที่ wrapper
-                if (wrapper && wrapper.classList.contains('p-highlight')) {
-                    return true;
-                }
-                return false;
-            }, headerInputSelector, headerCheckboxSelector);
-
-            if (isChecked) {
-                console.log('   Checkbox is ALREADY selected. Skipping click.');
-            } else {
-                console.log('   Checkbox is NOT selected. Clicking now...');
-                // คลิกที่ Wrapper (ปลอดภัยกว่าคลิก Input โดยตรงใน PrimeVue)
-                await page.click(headerCheckboxSelector);
-            }
+            // 2. คลิก Checkbox (Select All)
+            // คลิกที่ตัวกล่อง Checkbox โดยตรง (div wrapper) ซึ่งมักจะรับ Event Click ได้ดีกว่า input ที่อาจซ่อนอยู่
+            const checkboxSelector = 'div.p-multiselect-header > div.p-checkbox';
+            await page.waitForSelector(checkboxSelector, { visible: true, timeout: 5000 });
+            await page.click(checkboxSelector);
+            console.log('   Clicked Select All Checkbox.');
             
         } catch (e) {
             console.log('⚠️ Checkbox selection error: ' + e.message);
