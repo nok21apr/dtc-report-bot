@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Fix Step 3 Vehicle Selection)...');
+    console.log('🚀 Starting Bot (Fix Step 3 Vehicle Selection from User Code)...');
 
     /*
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
@@ -98,7 +98,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         } catch(e) { console.log('⚠️ Page structure wait warning.'); }
 
         // ---------------------------------------------------------
-        // Step 3: Check & Fill Form (Using User's Logic)
+        // Step 3: Check & Fill Form
         // ---------------------------------------------------------
         console.log('3️⃣ Step 3: Fill Form...');
         
@@ -169,40 +169,46 @@ const EMAIL_TO = process.env.EMAIL_TO;
             console.log('   Selected: กลุ่มทั้งหมด');
         } catch (e) { console.log('⚠️ Group selection skipped/failed: ' + e.message); }
 
-        // --- 3.3 เลือกรถ (Checkbox All) - UPDATED FROM SNIPPET ---
-        console.log('   Selecting All Vehicles (Updated Logic)...');
+        // --- 3.3 เลือกรถ (Checkbox All) - UPDATED WITH USER CODE ---
+        console.log('   Selecting All Vehicles (Logic from User Code)...');
         try {
-            // 1. คลิกเปิด Dropdown (Selector จาก Snippet: div.p-multiselect-label-container > div)
+            // 1. คลิกเปิด Dropdown (Selector ตาม User Code)
             const vehicleSelectTrigger = 'div.p-multiselect-label-container > div';
-            await page.waitForSelector(vehicleSelectSelector, { visible: true, timeout: 5000 });
+            await page.waitForSelector(vehicleSelectTrigger, { visible: true, timeout: 5000 });
             await page.click(vehicleSelectTrigger);
             console.log('   Opened Vehicle Multiselect.');
-        } catch (e) {
-            console.log('   Retry opening multiselect via fallback...');
-            await page.click('div.p-multiselect-label-container');
-        }
-
-        await new Promise(r => setTimeout(r, 1000));
-
-        try {
-            // 2. คลิก Select All (Selector จาก Snippet: div.p-multiselect-header > div.p-checkbox > input)
-            // หมายเหตุ: Puppeteer บางครั้งคลิก input ที่ซ่อนอยู่ไม่ได้ อาจต้องคลิก parent div แทน
-            // เราจะลองคลิก wrapper ก่อน ถ้าไม่ได้จะใช้ evaluate คลิก input โดยตรง
-            const checkboxWrapperSelector = 'div.p-multiselect-header > div.p-checkbox';
             
-            // รอให้ปุ่มปรากฏ
-            await page.waitForSelector(checkboxWrapperSelector, { visible: true, timeout: 5000 });
-            await page.click(checkboxWrapperSelector);
-            console.log('   Clicked Select All Checkbox.');
+            await new Promise(r => setTimeout(r, 1000));
+
+            // 2. (Optional from code) คลิกที่ Filter Input
+            // บางครั้งการคลิกที่นี่ช่วยให้ state ของ dropdown พร้อมทำงาน
+            const filterInput = 'div.p-multiselect-filter-container > input';
+            if (await page.$(filterInput)) {
+                await page.click(filterInput);
+                console.log('   Clicked Filter Input (to ensure focus).');
+                await new Promise(r => setTimeout(r, 500));
+            }
+
+            // 3. คลิก Select All (Selector ตาม User Code)
+            // ใช้ div.p-multiselect-header > div.p-checkbox > input
+            const selectAllInput = 'div.p-multiselect-header > div.p-checkbox > input';
+            
+            try {
+                // พยายามคลิกที่ input โดยตรง
+                await page.waitForSelector(selectAllInput, { visible: true, timeout: 3000 });
+                await page.click(selectAllInput);
+                console.log('   Clicked Select All Checkbox (Input).');
+            } catch (clickErr) {
+                // ถ้าคลิก input ไม่ได้ (อาจจะ hidden) ให้คลิก wrapper แทน
+                console.log('   Retry clicking Checkbox Wrapper...');
+                await page.click('div.p-multiselect-header > div.p-checkbox');
+            }
+            
         } catch (e) {
-            console.log('⚠️ Checkbox selection error, trying JS Click on Input...');
-            // Fallback: ใช้ JS คลิกที่ input โดยตรงตาม snippet
-            await page.evaluate(() => {
-                const input = document.querySelector('div.p-multiselect-header > div.p-checkbox > input');
-                if (input) input.click();
-            });
+            console.log('⚠️ Checkbox selection error: ' + e.message);
         }
         
+        // ปิด Dropdown
         await page.keyboard.press('Escape');
 
         // --- 3.4 วันที่ (Date Range) ---
