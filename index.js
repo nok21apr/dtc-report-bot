@@ -108,7 +108,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         
         const speedInputSelector = 'div:nth-of-type(8) input'; 
         
-        // 3.0 Report Type: "ความเร็วเกิน(กำหนดค่าเอง)"
+        // --- 3.1 เลือกข้อมูลสถานะ (Report Type) ---
         let isFormReady = false;
         try {
             await page.waitForSelector(speedInputSelector, { visible: true, timeout: 5000 });
@@ -116,36 +116,43 @@ const EMAIL_TO = process.env.EMAIL_TO;
         } catch(e) {}
         
         if (!isFormReady) {
-            console.log('   Form input not found. Selecting Report Type...');
+            console.log('   Selecting Status Info (Report Type)...');
             try {
-                // 1. คลิกเปิด Dropdown (Trigger)
-                // พยายามหาจากโครงสร้างหน้าเว็บ (มักจะเป็น Dropdown ตัวแรกๆ ใน Main Scroll)
-                const dropdownTrigger = 'div.scroll-main div.p-dropdown, div.scroll-main div:nth-of-type(4)'; 
-                await page.waitForSelector(dropdownTrigger, { timeout: 10000 });
-                await page.click(dropdownTrigger);
-                console.log('   Clicked Report Dropdown Trigger');
+                // 1. คลิกเปิด Dropdown
+                const triggerXPath = "//div[contains(@class, 'scroll-main')]//div[4]//span[contains(@class, 'p-dropdown-label')] | //span[contains(text(), 'ความเร็วเกิน(กำหนดค่าเอง)')]";
+                await page.waitForXPath(triggerXPath, { visible: true, timeout: 10000 });
+                const [trigger] = await page.$x(triggerXPath);
+                if (trigger) await trigger.click();
+                else await page.click('div.scroll-main div.p-dropdown');
                 
-                // รอ Animation
-                await new Promise(r => setTimeout(r, 1000));
+                // รอ List
+                await page.waitForSelector('.p-dropdown-items, [role="listbox"]', { visible: true, timeout: 5000 });
 
-                // 2. เลือก Item โดยใช้ aria-label="ความเร็วเกิน(กำหนดค่าเอง)"
-                // หมายเหตุ: ใช้ li[role="option"] หรือ li เฉยๆ
-                const reportOptionSelector = 'li[aria-label="ความเร็วเกิน(กำหนดค่าเอง)"]';
-                console.log(`   Clicking option: ${reportOptionSelector}`);
-                
-                await page.waitForSelector(reportOptionSelector, { visible: true, timeout: 5000 });
-                await page.click(reportOptionSelector);
-                console.log('   Selected Report Type successfully.');
-                
+                // 2. เลือก Item
+                const optionXPath = `
+                    //li[@role='option'][@aria-label='ความเร็วเกิน(กำหนดค่าเอง)'] | 
+                    //li[@role='option']//span[contains(text(), 'ความเร็วเกิน(กำหนดค่าเอง)')]
+                `;
+                await page.waitForXPath(optionXPath, { visible: true, timeout: 5000 });
+                const [option] = await page.$x(optionXPath);
+                if (option) {
+                    await option.click();
+                    console.log('   Selected: ความเร็วเกิน(กำหนดค่าเอง)');
+                } else {
+                    throw new Error('Option element not found in list');
+                }
             } catch (e) {
-                console.log('⚠️ Error selecting report type:', e.message);
-                throw e; 
+                console.error('⚠️ Error selecting report type:', e.message);
+                try {
+                     const opt = await page.$x("//li//span[contains(text(), 'ความเร็วเกิน')]");
+                     if(opt.length > 0) await opt[0].click();
+                } catch(err){}
             }
         } else {
             console.log('   Form input already visible.');
         }
 
-        // 3.1 รอให้ฟอร์มโหลด
+        // รอฟอร์มโหลด
         console.log('   Waiting for Speed Input field...');
         await page.waitForSelector(speedInputSelector, { visible: true, timeout: 60000 });
         
