@@ -169,54 +169,44 @@ const EMAIL_TO = process.env.EMAIL_TO;
             console.log('   Selected: กลุ่มทั้งหมด');
         } catch (e) { console.log('⚠️ Group selection skipped/failed: ' + e.message); }
 
-        // --- 3.3 เลือกรถ (Checkbox All) - UPDATED LOGIC ---
-        console.log('   Selecting All Vehicles (Smart Check)...');
+         // --- 3.3 เลือกรถ (Shift + ArrowDown) ---
+        console.log('   Selecting All Vehicles (Shift + ArrowDown)...');
         try {
-            // 1. คลิกเปิด Dropdown
-            const vehicleSelectTrigger = 'div.p-multiselect-label-container > div';
-            await page.waitForSelector(vehicleSelectTrigger, { visible: true, timeout: 5000 });
-            await page.click(vehicleSelectTrigger);
+            // 1. คลิกเปิด Dropdown (กรุณาเลือกรถ)
+            const vehicleSelectSelector = 'div.p-multiselect-label-container';
+            await page.waitForSelector(vehicleSelectSelector, { visible: true, timeout: 5000 });
+            await page.click(vehicleSelectSelector);
             console.log('   Opened Vehicle Multiselect.');
             
-            await new Promise(r => setTimeout(r, 1000));
+            await new Promise(r => setTimeout(r, 1000)); // รอ Animation Dropdown
 
-            // 2. ตรวจสอบสถานะก่อนคลิก
-            // Selector: div header -> checkbox wrapper -> input
-            const headerCheckboxSelector = 'div.p-multiselect-header .p-checkbox';
-            const headerInputSelector = 'div.p-multiselect-header .p-checkbox input';
+            // 2. เลื่อน Focus ไปที่รายการแรก (กดลง 1 ครั้ง)
+            await page.keyboard.press('ArrowDown');
+            await new Promise(r => setTimeout(r, 500));
 
-            await page.waitForSelector(headerCheckboxSelector, { visible: true, timeout: 5000 });
+            // 3. กด Shift ค้างไว้ แล้วกดลงรัวๆ
+            console.log('   Holding Shift and pressing ArrowDown...');
+            await page.keyboard.down('Shift');
 
-            // เช็คว่ามัน Checked อยู่แล้วหรือไม่?
-            const isChecked = await page.evaluate((inputSel, wrapperSel) => {
-                const input = document.querySelector(inputSel);
-                const wrapper = document.querySelector(wrapperSel);
-                
-                // ถ้า Input มี attribute checked หรือ aria-label เป็น Selected
-                if (input && (input.checked || input.getAttribute('aria-label') === 'All items selected')) {
-                    return true;
-                }
-                // บางที PrimeVue ใส่ class highlight ไว้ที่ wrapper
-                if (wrapper && wrapper.classList.contains('p-highlight')) {
-                    return true;
-                }
-                return false;
-            }, headerInputSelector, headerCheckboxSelector);
-
-            if (isChecked) {
-                console.log('   Checkbox is ALREADY selected. Skipping click.');
-            } else {
-                console.log('   Checkbox is NOT selected. Clicking now...');
-                // คลิกที่ Wrapper (ปลอดภัยกว่าคลิก Input โดยตรงใน PrimeVue)
-                await page.click(headerCheckboxSelector);
+            // ปรับจำนวนครั้งเป็น 1000 ตามที่ต้องการ
+            const numberOfTrucks = 1000; 
+            for (let i = 0; i < numberOfTrucks; i++) {
+                await page.keyboard.press('ArrowDown');
+                // ใส่ delay เล็กน้อยมากเพื่อให้ระบบรับทัน (แต่เร็วพอ)
+                if (i % 50 === 0) await new Promise(r => setTimeout(r, 10)); 
             }
+
+            // 4. ปล่อย Shift
+            await page.keyboard.up('Shift');
+            console.log('   Selection Loop Completed (1000 items).');
             
         } catch (e) {
-            console.log('⚠️ Checkbox selection error: ' + e.message);
+            console.log('⚠️ Vehicle selection error: ' + e.message);
         }
         
-        // ปิด Dropdown
+        // ปิด Dropdown (กด ESC)
         await page.keyboard.press('Escape');
+
 
         // --- 3.4 วันที่ (Date Range) ---
         console.log('   Setting Date Range...');
@@ -360,3 +350,4 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
