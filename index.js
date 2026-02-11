@@ -163,7 +163,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
             // เลือก Item
             const groupOptionSelector = 'li[aria-label="กลุ่มทั้งหมด"]';
-            await page.waitForSelector(groupOptionSelector, { visible: true, timeout: 5000 });
+            await page.waitForSelector(groupOptionSelector, { visible: true, timeout: 10000 });
             await page.click(groupOptionSelector);
             console.log('   Selected: กลุ่มทั้งหมด');
         } catch (e) { console.log('⚠️ Group selection skipped/failed: ' + e.message); }
@@ -173,7 +173,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         try {
             // 1. คลิกเปิด Dropdown (กรุณาเลือกรถ)
             const vehicleSelectSelector = 'div.p-multiselect-label-container';
-            await page.waitForSelector(vehicleSelectSelector, { visible: true, timeout: 5000 });
+            await page.waitForSelector(vehicleSelectSelector, { visible: true, timeout: 10000 });
             await page.click(vehicleSelectSelector);
             console.log('   Opened Vehicle Multiselect.');
             
@@ -348,3 +348,4 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
