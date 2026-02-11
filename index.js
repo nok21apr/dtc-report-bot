@@ -168,8 +168,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
             console.log('   Selected: กลุ่มทั้งหมด');
         } catch (e) { console.log('⚠️ Group selection skipped/failed: ' + e.message); }
 
-        // --- 3.3 เลือกรถ (Checkbox All) - TAB & SPACE SEQUENCE ---
-        console.log('   Selecting All Vehicles (Tab Sequence Method)...');
+        // --- 3.3 เลือกรถ (Shift + ArrowDown) ---
+        console.log('   Selecting All Vehicles (Shift + ArrowDown)...');
         try {
             // 1. คลิกเปิด Dropdown (กรุณาเลือกรถ)
             const vehicleSelectSelector = 'div.p-multiselect-label-container';
@@ -177,25 +177,33 @@ const EMAIL_TO = process.env.EMAIL_TO;
             await page.click(vehicleSelectSelector);
             console.log('   Opened Vehicle Multiselect.');
             
-            await new Promise(r => setTimeout(r, 1000)); // รอ Animation
+            await new Promise(r => setTimeout(r, 1000)); // รอ Animation Dropdown
 
-            // 2. ส่งคำสั่ง Tab 3 ครั้ง แล้วกด Space
-            // ลำดับการกดตาม Code ที่ User ให้มา: Tab -> Tab -> Tab -> Space
-            console.log('   Performing Keyboard Navigation (Tab x 3 -> Space)...');
-            
-            for(let i=0; i<3; i++) {
-                await page.keyboard.press('Tab');
-                await new Promise(r => setTimeout(r, 200));
+            // 2. เลื่อน Focus ไปที่รายการแรก (กดลง 1 ครั้ง)
+            await page.keyboard.press('ArrowDown');
+            await new Promise(r => setTimeout(r, 500));
+
+            // 3. กด Shift ค้างไว้ แล้วกดลงรัวๆ
+            console.log('   Holding Shift and pressing ArrowDown...');
+            await page.keyboard.down('Shift');
+
+            // ปรับจำนวนครั้งเป็น 1000 ตามที่ต้องการ
+            const numberOfTrucks = 1000; 
+            for (let i = 0; i < numberOfTrucks; i++) {
+                await page.keyboard.press('ArrowDown');
+                // ใส่ delay เล็กน้อยมากเพื่อให้ระบบรับทัน (แต่เร็วพอ)
+                if (i % 50 === 0) await new Promise(r => setTimeout(r, 10)); 
             }
-            
-            await page.keyboard.press('Space');
-            console.log('   Pressed Space (to Select All).');
+
+            // 4. ปล่อย Shift
+            await page.keyboard.up('Shift');
+            console.log('   Selection Loop Completed (1000 items).');
             
         } catch (e) {
-            console.log('⚠️ Checkbox selection error: ' + e.message);
+            console.log('⚠️ Vehicle selection error: ' + e.message);
         }
         
-        // ปิด Dropdown
+        // ปิด Dropdown (กด ESC)
         await page.keyboard.press('Escape');
 
         // --- 3.4 วันที่ (Date Range) ---
