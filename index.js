@@ -156,46 +156,22 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('   Waiting for Speed Input field...');
         await page.waitForSelector(speedInputSelector, { visible: true, timeout: 60000 });
         
-        // 3.2 Vehicle Group: "กลุ่มทั้งหมด"
+        // --- 3.2 เลือกกลุ่มรถ (Vehicle Group) ---
+        // ใช้ aria-label="กลุ่มทั้งหมด"
         console.log('   Selecting Vehicle Group...');
         try {
             await new Promise(r => setTimeout(r, 1000));
-            
-            // 1. คลิกเปิด Dropdown (ถัดจาก Report Type)
+            // คลิกเปิด Dropdown (ตัวถัดไป)
             const groupTrigger = 'div:nth-of-type(5) > div.flex-column span, div:nth-of-type(5) .p-dropdown';
             await page.click(groupTrigger);
             await new Promise(r => setTimeout(r, 1000));
 
-            // 2. เลือก Item โดยใช้ aria-label="กลุ่มทั้งหมด"
+            // เลือก Item จาก aria-label
             const groupOptionSelector = 'li[aria-label="กลุ่มทั้งหมด"]';
-            console.log(`   Clicking group option: ${groupOptionSelector}`);
-            
-            // ใช้ evaluate click เพื่อความชัวร์ หรือ Puppeteer click
-            // บางครั้ง aria-label อยู่ใน span ข้างใน
-            const foundGroup = await page.evaluate((sel) => {
-                // ลองหา li ที่มี aria-label ตรงๆ
-                let item = document.querySelector(sel);
-                if (!item) {
-                    // ถ้าไม่เจอ ลองหา li ที่มี text ว่า "กลุ่มทั้งหมด"
-                    const lis = document.querySelectorAll('li.p-dropdown-item');
-                    for (const li of lis) {
-                        if (li.innerText.includes('กลุ่มทั้งหมด') || li.getAttribute('aria-label') === 'กลุ่มทั้งหมด') {
-                            item = li;
-                            break;
-                        }
-                    }
-                }
-                if (item) {
-                    item.click();
-                    return true;
-                }
-                return false;
-            }, groupOptionSelector);
-            
-            if(foundGroup) console.log('   Selected Group "กลุ่มทั้งหมด"');
-            else console.log('⚠️ Group Option not found (might rely on default).');
-
-        } catch (e) { console.log('⚠️ Skipping Group Selection.'); }
+            await page.waitForSelector(groupOptionSelector, { visible: true, timeout: 5000 });
+            await page.click(groupOptionSelector);
+            console.log('   Selected: กลุ่มทั้งหมด');
+        } catch (e) { console.log('⚠️ Group selection skipped/failed: ' + e.message); }
 
         // --- 3.3 เลือกรถ (Shift + ArrowDown) ---
         console.log('   Selecting All Vehicles (Shift + ArrowDown)...');
@@ -239,8 +215,10 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('   Setting Date Range...');
         const d = new Date(); d.setDate(1); d.setDate(d.getDate() - 2); 
         const y = d.getFullYear(); const m = d.getMonth() + 1; const day = d.getDate(); 
+        
         const d2 = new Date(); const y2 = d2.getFullYear(); const m2 = d2.getMonth() + 1; 
         const last = new Date(y2, m2, 0).getDate(); 
+        
         const pad = (n) => n < 10 ? '0' + n : n;
         const startDateStr = `${pad(day)}/${pad(m)}/${y} 00:00:00`;
         const endDateStr = `${pad(last)}/${pad(m2)}/${y2} 23:59:59`;
@@ -253,7 +231,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await page.keyboard.press('Backspace');
         await page.type(dateInputSelector, fullDateString, { delay: 10 });
         await page.keyboard.press('Tab');
-
+        
         // 3.5 Speed
         console.log('   Setting Speed 55...');
         await page.click(speedInputSelector, { clickCount: 3 });
