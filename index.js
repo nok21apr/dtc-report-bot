@@ -184,7 +184,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
             console.log('   Opened Vehicle Multiselect.');
             
             // รอให้ Panel รายการรถปรากฏขึ้นมาจริงๆ (สำคัญมาก)
-            await page.waitForSelector('.p-multiselect-panel', { visible: true, timeout: 5000 });
+            await page.waitForSelector('.p-multiselect-panel', { visible: true, timeout: 25000 });
             await new Promise(r => setTimeout(r, 1000)); 
 
             // 2. เลื่อน Focus ไปที่รายการแรก
@@ -344,10 +344,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log(`✅ File Downloaded: ${finalFile}`);
         await browser.close();
 
-        // ---------------------------------------------------------
-        // Step 7: Email
-        // ---------------------------------------------------------
-        console.log('📧 Step 7: Sending Email...');
+        console.log('📧 Sending Email...');
         const transporter = nodemailer.createTransport({
             service: 'gmail',
             auth: { user: EMAIL_USER, pass: EMAIL_PASS }
@@ -375,3 +372,5 @@ const EMAIL_TO = process.env.EMAIL_TO;
     }
 })();
 
+
+ 
