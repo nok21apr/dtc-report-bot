@@ -169,38 +169,39 @@ const EMAIL_TO = process.env.EMAIL_TO;
             console.log('   Selected: กลุ่มทั้งหมด');
         } catch (e) { console.log('⚠️ Group selection skipped/failed: ' + e.message); }
 
-        // --- 3.3 เลือกรถ (Checkbox All) - UPDATED FROM SNIPPET ---
-        console.log('   Selecting All Vehicles (Updated Logic)...');
+        // --- 3.3 เลือกรถ (Shift + ArrowDown) ---
+        console.log('   Selecting All Vehicles (Shift + ArrowDown)...');
         try {
-            // 1. คลิกเปิด Dropdown (Selector จาก Snippet: div.p-multiselect-label-container > div)
-            const vehicleSelectTrigger = 'div.p-multiselect-label-container > div';
+            // 1. คลิกเปิด Dropdown (กรุณาเลือกรถ)
+            const vehicleSelectSelector = 'div.p-multiselect-label-container';
             await page.waitForSelector(vehicleSelectSelector, { visible: true, timeout: 5000 });
-            await page.click(vehicleSelectTrigger);
+            await page.click(vehicleSelectSelector);
             console.log('   Opened Vehicle Multiselect.');
-        } catch (e) {
-            console.log('   Retry opening multiselect via fallback...');
-            await page.click('div.p-multiselect-label-container');
-        }
-
-        await new Promise(r => setTimeout(r, 1000));
-
-        try {
-            // 2. คลิก Select All (Selector จาก Snippet: div.p-multiselect-header > div.p-checkbox > input)
-            // หมายเหตุ: Puppeteer บางครั้งคลิก input ที่ซ่อนอยู่ไม่ได้ อาจต้องคลิก parent div แทน
-            // เราจะลองคลิก wrapper ก่อน ถ้าไม่ได้จะใช้ evaluate คลิก input โดยตรง
-            const checkboxWrapperSelector = 'div.p-multiselect-header > div.p-checkbox';
             
-            // รอให้ปุ่มปรากฏ
-            await page.waitForSelector(checkboxWrapperSelector, { visible: true, timeout: 5000 });
-            await page.click(checkboxWrapperSelector);
-            console.log('   Clicked Select All Checkbox.');
+            await new Promise(r => setTimeout(r, 1000)); // รอ Animation Dropdown
+
+            // 2. เลื่อน Focus ไปที่รายการแรก (กดลง 1 ครั้ง)
+            await page.keyboard.press('ArrowDown');
+            await new Promise(r => setTimeout(r, 500));
+
+            // 3. กด Shift ค้างไว้ แล้วกดลงรัวๆ
+            console.log('   Holding Shift and pressing ArrowDown...');
+            await page.keyboard.down('Shift');
+
+            // ปรับจำนวนครั้งเป็น 1000 ตามที่ต้องการ
+            const numberOfTrucks = 1000; 
+            for (let i = 0; i < numberOfTrucks; i++) {
+                await page.keyboard.press('ArrowDown');
+                // ใส่ delay เล็กน้อยมากเพื่อให้ระบบรับทัน (แต่เร็วพอ)
+                if (i % 50 === 0) await new Promise(r => setTimeout(r, 10)); 
+            }
+
+            // 4. ปล่อย Shift
+            await page.keyboard.up('Shift');
+            console.log('   Selection Loop Completed (1000 items).');
+            
         } catch (e) {
-            console.log('⚠️ Checkbox selection error, trying JS Click on Input...');
-            // Fallback: ใช้ JS คลิกที่ input โดยตรงตาม snippet
-            await page.evaluate(() => {
-                const input = document.querySelector('div.p-multiselect-header > div.p-checkbox > input');
-                if (input) input.click();
-            });
+            console.log('⚠️ Vehicle selection error: ' + e.message);
         }
         
         await page.keyboard.press('Escape');
@@ -347,3 +348,4 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
