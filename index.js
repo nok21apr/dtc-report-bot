@@ -179,12 +179,12 @@ const EMAIL_TO = process.env.EMAIL_TO;
         try {
             // 1. คลิกเปิด Dropdown
             const vehicleSelectSelector = 'div.p-multiselect-label-container';
-            await page.waitForSelector(vehicleSelectSelector, { visible: true, timeout: 25000 });
+            await page.waitForSelector(vehicleSelectSelector, { visible: true, timeout: 5000 });
             await page.click(vehicleSelectSelector);
             console.log('   Opened Vehicle Multiselect.');
             
             // รอให้ Panel รายการรถปรากฏขึ้นมาจริงๆ (สำคัญมาก)
-            await page.waitForSelector('.p-multiselect-panel', { visible: true, timeout: 25000 });
+            await page.waitForSelector('.p-multiselect-panel', { visible: true, timeout: 5000 });
             await new Promise(r => setTimeout(r, 1000)); 
 
             // 2. เลื่อน Focus ไปที่รายการแรก
@@ -344,7 +344,10 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log(`✅ File Downloaded: ${finalFile}`);
         await browser.close();
 
-        console.log('📧 Sending Email...');
+        // ---------------------------------------------------------
+        // Step 7: Email
+        // ---------------------------------------------------------
+        console.log('📧 Step 7: Sending Email...');
         const transporter = nodemailer.createTransport({
             service: 'gmail',
             auth: { user: EMAIL_USER, pass: EMAIL_PASS }
@@ -371,6 +374,3 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
-
-
- 
