@@ -155,24 +155,20 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // รอฟอร์มโหลด
         console.log('   Waiting for Speed Input field...');
         await page.waitForSelector(speedInputSelector, { visible: true, timeout: 60000 });
-        
-        // --- 3.2 เลือกกลุ่มรถ (Vehicle Group) ---
-        // ใช้ aria-label="กลุ่มทั้งหมด"
+       
+	 // 3.2 Vehicle Group
         console.log('   Selecting Vehicle Group...');
         try {
-            await new Promise(r => setTimeout(r, 1000));
-            // คลิกเปิด Dropdown (ตัวถัดไป)
-            const groupTrigger = 'div:nth-of-type(5) > div.flex-column span, div:nth-of-type(5) .p-dropdown';
-            await page.click(groupTrigger);
-            await new Promise(r => setTimeout(r, 1000));
-
-            // เลือก Item จาก aria-label
-            const groupOptionSelector = 'li[aria-label="กลุ่มทั้งหมด"]';
-            await page.waitForSelector(groupOptionSelector, { visible: true, timeout: 5000 });
-            await page.click(groupOptionSelector);
-            console.log('   Selected: กลุ่มทั้งหมด');
-        } catch (e) { console.log('⚠️ Group selection skipped/failed: ' + e.message); }
-
+            await new Promise(r => setTimeout(r, 2000));
+            const groupDropdown = 'div:nth-of-type(5) > div.flex-column span';
+            if (await page.$(groupDropdown)) {
+                await page.click(groupDropdown);
+                await new Promise(r => setTimeout(r, 2000));
+                const groupOption = await page.$x("//li//span[contains(text(), 'กลุ่มทั้งหมด')]");
+                if (groupOption.length > 0) await groupOption[0].click();
+            }
+        } catch (e) { console.log('⚠️ Skipping Group Selection.'); }
+    
         // --- 3.3 เลือกรถ (Shift + ArrowDown) ---
         console.log('   Selecting All Vehicles (Shift + ArrowDown)...');
         try {
