@@ -11,12 +11,14 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Step 3: ARIA Label Update)...');
+    console.log('🚀 Starting Bot (Step 3.3: Tab Navigation Sequence)...');
 
+    /*
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
-        console.error('❌ Error: Secrets incomplete. Please check your environment variables.');
-        // process.exit(1); 
+        console.error('❌ Error: Secrets incomplete.');
+        process.exit(1); 
     }
+    */
 
     const downloadPath = path.join(__dirname, 'downloads');
     if (fs.existsSync(downloadPath)) fs.rmSync(downloadPath, { recursive: true, force: true });
@@ -28,7 +30,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
     try {
         console.log('🖥️ Launching Browser...');
         browser = await puppeteer.launch({
-            headless: 'new',
+            headless: 'new', // ใช้ 'new' สำหรับ Server
             args: [
                 '--no-sandbox',
                 '--disable-setuid-sandbox',
@@ -59,9 +61,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await new Promise(r => setTimeout(r, 1000));
 
         try {
-            const passwordSelector = 'input[type="password"]';
-            await page.waitForSelector(passwordSelector, { visible: true, timeout: 30000 });
-            await page.type(passwordSelector, DTC_PASS || 'TEST_PASS');
+            await page.type('input[type="password"]', DTC_PASS || 'TEST_PASS');
         } catch (e) {
             await page.type('#password1 > input', DTC_PASS || 'TEST_PASS');
         }
@@ -77,34 +77,30 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         await page.waitForFunction(() => !document.querySelector('#Username'), { timeout: 90000 });
         console.log('✅ Login Success');
+        await new Promise(r => setTimeout(r, 2000));
 
         // ---------------------------------------------------------
-        // Step 2: Navigate to Report
+        // Step 2: Navigate Directly to Status Report
         // ---------------------------------------------------------
-        console.log('2️⃣ Step 2: Go to Report Page...');
+        console.log('2️⃣ Step 2: Navigate to Report Link...');
         try {
-            await page.goto('https://gps.dtc.co.th/v2/report-main/car-usage/status', { waitUntil: 'domcontentloaded', timeout: 60000 });
+            await page.goto('https://gps.dtc.co.th/v2/report-main/car-usage/status', { 
+                waitUntil: 'domcontentloaded', 
+                timeout: 60000 
+            });
+            console.log('✅ Navigated to Status Report Page.');
         } catch (err) {
-            console.log('⚠️ Navigation timeout, checking page content...');
+            console.log('⚠️ Navigation timeout, checking content...');
         }
 
         try {
             await page.waitForSelector('div.layout-main, div.layout-menu-container', { timeout: 20000 });
-            console.log('✅ Report Page Structure Loaded');
-        } catch (e) {
-            console.log('⚠️ Page structure wait failed, attempting Click Fallback...');
-            await page.evaluate(() => {
-                const elements = Array.from(document.querySelectorAll('span, a, div'));
-                const target = elements.find(el => el.innerText && el.innerText.trim() === 'รายงานสถานะ');
-                if (target) target.click();
-            });
-            await new Promise(r => setTimeout(r, 5000));
-        }
+        } catch(e) { console.log('⚠️ Page structure wait warning.'); }
 
         // ---------------------------------------------------------
-        // Step 3: Fill Form (Updated with ARIA Labels)
+        // Step 3: Check & Fill Form
         // ---------------------------------------------------------
-        console.log('3️⃣ Step 3: Check & Fill Form...');
+        console.log('3️⃣ Step 3: Fill Form...');
         
         const speedInputSelector = 'div:nth-of-type(8) input'; 
         
@@ -155,22 +151,25 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // รอฟอร์มโหลด
         console.log('   Waiting for Speed Input field...');
         await page.waitForSelector(speedInputSelector, { visible: true, timeout: 60000 });
-       
-	 // 3.2 Vehicle Group
+        
+        // --- 3.2 เลือกกลุ่มรถ (Vehicle Group) ---
         console.log('   Selecting Vehicle Group...');
         try {
-            await new Promise(r => setTimeout(r, 2000));
-            const groupDropdown = 'div:nth-of-type(5) > div.flex-column span';
-            if (await page.$(groupDropdown)) {
-                await page.click(groupDropdown);
-                await new Promise(r => setTimeout(r, 2000));
-                const groupOption = await page.$x("//li//span[contains(text(), 'กลุ่มทั้งหมด')]");
-                if (groupOption.length > 0) await groupOption[0].click();
-            }
-        } catch (e) { console.log('⚠️ Skipping Group Selection.'); }
-    
-        // --- 3.3 เลือกรถ (Shift + ArrowDown) ---
-        console.log('   Selecting All Vehicles (Shift + ArrowDown)...');
+            await new Promise(r => setTimeout(r, 1000));
+            // คลิกเปิด Dropdown
+            const groupTrigger = 'div:nth-of-type(5) > div.flex-column span, div:nth-of-type(5) .p-dropdown';
+            await page.click(groupTrigger);
+            await new Promise(r => setTimeout(r, 1000));
+
+            // เลือก Item
+            const groupOptionSelector = 'li[aria-label="กลุ่มทั้งหมด"]';
+            await page.waitForSelector(groupOptionSelector, { visible: true, timeout: 5000 });
+            await page.click(groupOptionSelector);
+            console.log('   Selected: กลุ่มทั้งหมด');
+        } catch (e) { console.log('⚠️ Group selection skipped/failed: ' + e.message); }
+
+        // --- 3.3 เลือกรถ (Checkbox All) - TAB & SPACE SEQUENCE ---
+        console.log('   Selecting All Vehicles (Tab Sequence Method)...');
         try {
             // 1. คลิกเปิด Dropdown (กรุณาเลือกรถ)
             const vehicleSelectSelector = 'div.p-multiselect-label-container';
@@ -178,48 +177,52 @@ const EMAIL_TO = process.env.EMAIL_TO;
             await page.click(vehicleSelectSelector);
             console.log('   Opened Vehicle Multiselect.');
             
-            await new Promise(r => setTimeout(r, 1000)); // รอ Animation Dropdown
+            await new Promise(r => setTimeout(r, 1000)); // รอ Animation
 
-            // 2. เลื่อน Focus ไปที่รายการแรก (กดลง 1 ครั้ง)
-            await page.keyboard.press('ArrowDown');
-            await new Promise(r => setTimeout(r, 500));
-
-            // 3. กด Shift ค้างไว้ แล้วกดลงรัวๆ
-            console.log('   Holding Shift and pressing ArrowDown...');
-            await page.keyboard.down('Shift');
-
-            // ปรับจำนวนครั้งเป็น 1000 ตามที่ต้องการ
-            const numberOfTrucks = 1000; 
-            for (let i = 0; i < numberOfTrucks; i++) {
-                await page.keyboard.press('ArrowDown');
-                // ใส่ delay เล็กน้อยมากเพื่อให้ระบบรับทัน (แต่เร็วพอ)
-                if (i % 50 === 0) await new Promise(r => setTimeout(r, 10)); 
+            // 2. ส่งคำสั่ง Tab 3 ครั้ง แล้วกด Space
+            // ลำดับการกดตาม Code ที่ User ให้มา: Tab -> Tab -> Tab -> Space
+            console.log('   Performing Keyboard Navigation (Tab x 3 -> Space)...');
+            
+            for(let i=0; i<3; i++) {
+                await page.keyboard.press('Tab');
+                await new Promise(r => setTimeout(r, 200));
             }
-
-            // 4. ปล่อย Shift
-            await page.keyboard.up('Shift');
-            console.log('   Selection Loop Completed (1000 items).');
+            
+            await page.keyboard.press('Space');
+            console.log('   Pressed Space (to Select All).');
             
         } catch (e) {
-            console.log('⚠️ Vehicle selection error: ' + e.message);
+            console.log('⚠️ Checkbox selection error: ' + e.message);
         }
         
-        // ปิด Dropdown (กด ESC)
+        // ปิด Dropdown
         await page.keyboard.press('Escape');
 
-        // 3.4 Date Range
+        // --- 3.4 วันที่ (Date Range) ---
         console.log('   Setting Date Range...');
-        const d = new Date(); d.setDate(1); d.setDate(d.getDate() - 2); 
-        const y = d.getFullYear(); const m = d.getMonth() + 1; const day = d.getDate(); 
+        const now = new Date();
+        const currentYear = now.getFullYear();
+        const currentMonth = now.getMonth(); 
         
-        const d2 = new Date(); const y2 = d2.getFullYear(); const m2 = d2.getMonth() + 1; 
-        const last = new Date(y2, m2, 0).getDate(); 
+        // Start Date: 1st of current month - 2 days
+        const startDate = new Date(currentYear, currentMonth, 1);
+        startDate.setDate(startDate.getDate() - 2); 
+        
+        // End Date: Last day of current month
+        const endDate = new Date(currentYear, currentMonth + 1, 0); 
         
         const pad = (n) => n < 10 ? '0' + n : n;
-        const startDateStr = `${pad(day)}/${pad(m)}/${y} 00:00:00`;
-        const endDateStr = `${pad(last)}/${pad(m2)}/${y2} 23:59:59`;
+        const formatDateTime = (date, isEnd = false) => {
+            const d = pad(date.getDate());
+            const m = pad(date.getMonth() + 1);
+            const y = date.getFullYear();
+            const time = isEnd ? '23:59:59' : '00:00:00';
+            return `${d}/${m}/${y} ${time}`;
+        };
+
+        const startDateStr = formatDateTime(startDate, false);
+        const endDateStr = formatDateTime(endDate, true);
         const fullDateString = `${startDateStr} - ${endDateStr}`;
-        
         console.log(`      Date: ${fullDateString}`);
 
         const dateInputSelector = 'div:nth-of-type(7) input';
@@ -227,7 +230,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await page.keyboard.press('Backspace');
         await page.type(dateInputSelector, fullDateString, { delay: 10 });
         await page.keyboard.press('Tab');
-        
+
         // 3.5 Speed
         console.log('   Setting Speed 55...');
         await page.click(speedInputSelector, { clickCount: 3 });
@@ -242,12 +245,12 @@ const EMAIL_TO = process.env.EMAIL_TO;
         }
 
         // ---------------------------------------------------------
-        // Step 4: Search
+        // Step 4: Search & Export
         // ---------------------------------------------------------
-        console.log('4️⃣ Step 4: Search...');
+        console.log('4️⃣ Step 4: Search & Export...');
+        
         const searchBtnXPath = "//*[@id='app']/div/main/div[2]/div/div[2]/div[2]/div/div/div[4]/button[2]";
         const searchBtn = await page.$x(searchBtnXPath);
-        
         if (searchBtn.length > 0) {
             await searchBtn[0].click();
         } else {
@@ -257,23 +260,9 @@ const EMAIL_TO = process.env.EMAIL_TO;
             });
         }
 
-        // ---------------------------------------------------------
-        // Step 5: Wait for Data
-        // ---------------------------------------------------------
-        console.log('⏳ Step 5: Waiting for Data...');
-        try {
-            await page.waitForFunction(() => {
-                return document.querySelectorAll('button').length > 0;
-            }, { timeout: 300000 });
-            await new Promise(r => setTimeout(r, 10000));
-        } catch (e) {
-            console.log('⚠️ Wait timeout, trying to proceed anyway...');
-        }
+        console.log('   Waiting for Data...');
+        await new Promise(r => setTimeout(r, 10000));
 
-        // ---------------------------------------------------------
-        // Step 6: Export & Download
-        // ---------------------------------------------------------
-        console.log('6️⃣ Step 6: Exporting (CSV)...');
         console.log('   Clicking Export Menu...');
         try {
             await page.waitForSelector('.p-toolbar-group-right', { timeout: 30000 }).catch(() => {});
@@ -291,9 +280,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
             }
         } catch (e) { console.log('⚠️ Export Menu Click Failed'); }
 
-        await new Promise(r => setTimeout(r, 5000));
+        await new Promise(r => setTimeout(r, 2000));
 
-        // เลือก CSV
         console.log('   Selecting CSV Option...');
         const csvSelected = await page.evaluate(() => {
             const items = document.querySelectorAll('li, span.p-menuitem-text');
@@ -311,7 +299,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
             if (csvBtn.length > 0) await csvBtn[0].click();
         }
 
-        // รอไฟล์ CSV
         console.log('   Waiting for CSV file...');
         let finalFile = null;
         for (let i = 0; i < 300; i++) { 
@@ -326,10 +313,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log(`✅ File Downloaded: ${finalFile}`);
         await browser.close();
 
-        // ---------------------------------------------------------
-        // Step 7: Email
-        // ---------------------------------------------------------
-        console.log('📧 Step 7: Sending Email...');
+        console.log('📧 Sending Email...');
         const transporter = nodemailer.createTransport({
             service: 'gmail',
             auth: { user: EMAIL_USER, pass: EMAIL_PASS }
@@ -350,7 +334,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
         if (page && !page.isClosed()) {
             try { 
                 await page.screenshot({ path: path.join(downloadPath, 'error_screenshot.png'), fullPage: true });
-                console.log('📸 Error screenshot saved to downloads/error_screenshot.png');
             } catch(e){}
         }
         if (browser) await browser.close();
