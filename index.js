@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Step 3.3: Shift + ArrowDown Method)...');
+    console.log('🚀 Starting Bot (Step 3.3: Tab Navigation Sequence)...');
 
     /*
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
@@ -163,7 +163,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
             // เลือก Item
             const groupOptionSelector = 'li[aria-label="กลุ่มทั้งหมด"]';
-            await page.waitForSelector(groupOptionSelector, { visible: true, timeout: 10000 });
+            await page.waitForSelector(groupOptionSelector, { visible: true, timeout: 5000 });
             await page.click(groupOptionSelector);
             console.log('   Selected: กลุ่มทั้งหมด');
         } catch (e) { console.log('⚠️ Group selection skipped/failed: ' + e.message); }
@@ -173,7 +173,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         try {
             // 1. คลิกเปิด Dropdown (กรุณาเลือกรถ)
             const vehicleSelectSelector = 'div.p-multiselect-label-container';
-            await page.waitForSelector(vehicleSelectSelector, { visible: true, timeout: 10000 });
+            await page.waitForSelector(vehicleSelectSelector, { visible: true, timeout: 5000 });
             await page.click(vehicleSelectSelector);
             console.log('   Opened Vehicle Multiselect.');
             
@@ -187,7 +187,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
             console.log('   Holding Shift and pressing ArrowDown...');
             await page.keyboard.down('Shift');
 
-            // กดลง 1000 ครั้ง เพื่อให้มั่นใจว่าคลุมรถทั้งหมด (ปรับจำนวนได้ตามจริง)
+            // ปรับจำนวนครั้งเป็น 1000 ตามที่ต้องการ
             const numberOfTrucks = 1000; 
             for (let i = 0; i < numberOfTrucks; i++) {
                 await page.keyboard.press('ArrowDown');
@@ -197,7 +197,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
             // 4. ปล่อย Shift
             await page.keyboard.up('Shift');
-            console.log('   Selection Loop Completed.');
+            console.log('   Selection Loop Completed (1000 items).');
             
         } catch (e) {
             console.log('⚠️ Vehicle selection error: ' + e.message);
@@ -348,4 +348,3 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
-
