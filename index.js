@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Step 3.3: Shift + ArrowDown Method)...');
+    console.log('🚀 Starting Bot (Fix Checkbox State Logic)...');
 
     /*
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
@@ -139,6 +139,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
                 }
             } catch (e) {
                 console.error('⚠️ Error selecting report type:', e.message);
+                // Attempt blind click
                 try {
                      const opt = await page.$x("//li//span[contains(text(), 'ความเร็วเกิน')]");
                      if(opt.length > 0) await opt[0].click();
