@@ -135,6 +135,9 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
                 await targetPage.keyboard.down('ArrowDown');
                 await targetPage.keyboard.up('ArrowDown');
+
+                await targetPage.keyboard.down('ArrowDown');
+                await targetPage.keyboard.up('ArrowDown');
                 
                 await targetPage.keyboard.down('ArrowDown');
                 await targetPage.keyboard.up('ArrowDown');
@@ -482,6 +485,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
 
 
 
