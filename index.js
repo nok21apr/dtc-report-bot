@@ -118,10 +118,10 @@ const EMAIL_TO = process.env.EMAIL_TO;
                 const targetPage = page;
                 
                 await puppeteer.Locator.race([
-                    targetPage.locator('::-p-aria(ความเร็วเกิน\\(กำหนดค่าเอง\\))'),
+                    targetPage.locator('::-p-aria(รถวิ่ง)'),
                     targetPage.locator('div:nth-of-type(4) > div.flex-column span'),
                     targetPage.locator(':scope >>> div:nth-of-type(4) > div.flex-column span'),
-                    targetPage.locator('::-p-text(ความเร็วเกิน\\(กำหนดค่าเอง\\))')
+                    targetPage.locator('::-p-รถวิ่ง')
                 ])
                     .setTimeout(timeout)
                     .click({
@@ -132,9 +132,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
                     });
 
                 await new Promise(r => setTimeout(r, 1000));
-
-                await targetPage.keyboard.down('ArrowDown');
-                await targetPage.keyboard.up('ArrowDown');
 
                 await targetPage.keyboard.down('ArrowDown');
                 await targetPage.keyboard.up('ArrowDown');
@@ -485,6 +482,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
 
 
 
