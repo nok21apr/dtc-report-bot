@@ -183,10 +183,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
             }
             console.log('   Opened Vehicle Multiselect.');
             
-            // รอให้ Panel รายการรถปรากฏขึ้นมาจริงๆ
-            await page.waitForSelector('.p-multiselect-panel', { visible: true, timeout: 5000 });
-            await new Promise(r => setTimeout(r, 1000)); 
-
             // 2. เลื่อน Focus ไปที่รายการแรกตาม Record (กดลูกศรลง 1 ครั้ง)
             await page.keyboard.press('ArrowDown');
             await new Promise(r => setTimeout(r, 500));
@@ -363,5 +359,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
 
 
