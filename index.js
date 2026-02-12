@@ -138,9 +138,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
                 
                 await targetPage.keyboard.down('ArrowDown');
                 await targetPage.keyboard.up('ArrowDown');
-
-                await targetPage.keyboard.down('ArrowDown');
-                await targetPage.keyboard.up('ArrowDown');
                 
                 await targetPage.keyboard.down('ArrowDown');
                 await targetPage.keyboard.up('ArrowDown');
@@ -154,7 +151,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
             } catch (e) {
                 console.error('⚠️ Error selecting report type:', e.message);
                 try {
-                     const opt = await page.$x("//li//span[contains(text(), 'ความเร็วเกิน')]");
+                     const opt = await page.$x("//li//span[contains(text(), 'ความเร็วเกิน(กำหนดค่าเอง)')]");
                      if(opt.length > 0) await opt[0].click();
                 } catch(err){}
             }
@@ -485,5 +482,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
 
 
