@@ -158,8 +158,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
             // 1. คลิก Dropdown ข้อมูลกลุ่มรถ
             await puppeteer.Locator.race([
                 targetPage.locator('div:nth-of-type(5) path'),
-                targetPage.locator('::-p-xpath(//*[@id="pv_id_40"]/div/svg/path)'),
-                targetPage.locator(':scope >>> div:nth-of-type(5) path')
+
             ])
                 .setTimeout(timeout)
                 .click({
@@ -174,9 +173,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
             // 2. คลิกเลือก "กลุ่มทั้งหมด"
             await puppeteer.Locator.race([
                 targetPage.locator('::-p-aria(กลุ่มทั้งหมด[role="option"]) >>>> ::-p-aria([role="generic"])'),
-                targetPage.locator('#pv_id_40_0 > span.p-dropdown-item-label'),
-                targetPage.locator('::-p-xpath(//*[@id="pv_id_40_0"]/span[1])'),
-                targetPage.locator(':scope >>> #pv_id_40_0 > span.p-dropdown-item-label')
+
             ])
                 .setTimeout(timeout)
                 .click({
@@ -379,3 +376,4 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
