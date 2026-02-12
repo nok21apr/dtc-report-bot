@@ -107,14 +107,14 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // --- 3.1 เลือกข้อมูลสถานะ (Report Type) ---
         let isFormReady = false;
         try {
-            await page.waitForSelector(speedInputSelector, { visible: true, timeout: 5000 });
+            await page.waitForSelector(speedInputSelector, { visible: true, timeout: 10000 });
             isFormReady = true;
         } catch(e) {}
         
         if (!isFormReady) {
             console.log('   Selecting Status Info (Report Type)...');
             try {
-                const timeout = 5000;
+                const timeout = 10000;
                 const targetPage = page;
                 
                 await puppeteer.Locator.race([
@@ -131,7 +131,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
                       },
                     });
 
-                await new Promise(r => setTimeout(r, 500));
+                await new Promise(r => setTimeout(r, 1000));
 
                 await targetPage.keyboard.down('ArrowDown');
                 await targetPage.keyboard.up('ArrowDown');
@@ -147,7 +147,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
                 
                 console.log('   Selected: Report Type (via Puppeteer Record Flow).');
                 
-                await new Promise(r => setTimeout(r, 1000));
+                await new Promise(r => setTimeout(r, 2000));
             } catch (e) {
                 console.error('⚠️ Error selecting report type:', e.message);
                 try {
@@ -482,6 +482,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
 
 
 
