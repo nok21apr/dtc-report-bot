@@ -162,7 +162,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // รอฟอร์มโหลด
         console.log('   Waiting for Speed Input field...');
         await page.waitForSelector(speedInputSelector, { visible: true, timeout: 60000 });
-
         
         // --- 3.2 & 3.3 เลือกกลุ่มรถและรถ (Strict Puppeteer Record Flow) ---
         console.log('   Selecting Vehicle Group & All Vehicles (Strict Puppeteer Record)...');
@@ -173,7 +172,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
             // 1. คลิก Dropdown ข้อมูลกลุ่มรถ
             await puppeteer.Locator.race([
                 targetPage.locator('div:nth-of-type(5) path'),
-
+                targetPage.locator(':scope >>> div:nth-of-type(5) path')
             ])
                 .setTimeout(timeout)
                 .click({
@@ -297,54 +296,58 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // ---------------------------------------------------------
         console.log('4️⃣ Step 4: Search & Export...');
         
-        const searchBtnXPath = "//*[@id='app']/div/main/div[2]/div/div[2]/div[2]/div/div/div[4]/button[2]";
-        const searchBtn = await page.$x(searchBtnXPath);
-        if (searchBtn.length > 0) {
-            await searchBtn[0].click();
-        } else {
-            await page.evaluate(() => {
-                 const buttons = document.querySelectorAll('button');
-                 if(buttons.length > 0) buttons[buttons.length - 1].click();
-            });
-        }
-
-        console.log('   Waiting for Data...');
-        await new Promise(r => setTimeout(r, 10000));
-
-        console.log('   Clicking Export Menu...');
         try {
-            await page.waitForSelector('.p-toolbar-group-right', { timeout: 30000 }).catch(() => {});
-            const menuClicked = await page.evaluate(() => {
-                const toolbar = document.querySelector('.p-toolbar-group-right, .flex.justify-content-end');
-                if (toolbar) {
-                    const btn = toolbar.querySelector('button, div[role="button"]');
-                    if (btn) { btn.click(); return true; }
-                }
-                return false;
-            });
-            if (!menuClicked) {
-                const exBtn = await page.$x("//*[@id='pv_id_38' or contains(@id, 'pv_id_')]/div/svg");
-                if (exBtn.length > 0) await exBtn[0].click();
-            }
-        } catch (e) { console.log('⚠️ Export Menu Click Failed'); }
+            const timeout = 5000;
+            const targetPage = page;
 
-        await new Promise(r => setTimeout(r, 2000));
+            console.log('   Clicking Search Button...');
+            await puppeteer.Locator.race([
+                targetPage.locator('div.flex > div.h-full > div > div > div.flex > button:nth-of-type(2) > div > span'),
+                targetPage.locator('::-p-xpath(//*[@id="app"]/div/main/div[2]/div/div[2]/div[2]/div/div/div[4]/button[2]/div/span)'),
+                targetPage.locator(':scope >>> div.flex > div.h-full > div > div > div.flex > button:nth-of-type(2) > div > span')
+            ])
+                .setTimeout(timeout)
+                .click({
+                  offset: {
+                    x: 5.3089599609375,
+                    y: 7.21527099609375,
+                  },
+                });
 
-        console.log('   Selecting CSV Option...');
-        const csvSelected = await page.evaluate(() => {
-            const items = document.querySelectorAll('li, span.p-menuitem-text');
-            for (let item of items) {
-                if (item.innerText.trim() === 'CSV') {
-                    item.click();
-                    return true;
-                }
-            }
-            return false;
-        });
+            console.log('   Waiting for Data...');
+            // รอให้ตารางข้อมูลโหลดเสร็จก่อนค่อยกด Export
+            await new Promise(r => setTimeout(r, 200000)); 
 
-        if (!csvSelected) {
-            const csvBtn = await page.$x("//span[contains(text(), 'CSV')]");
-            if (csvBtn.length > 0) await csvBtn[0].click();
+            console.log('   Clicking Export Menu...');
+            await puppeteer.Locator.race([
+                targetPage.locator('span:nth-of-type(1) svg'),
+                targetPage.locator(':scope >>> span:nth-of-type(1) svg')
+            ])
+                .setTimeout(timeout)
+                .click({
+                  offset: {
+                    x: 10.8367919921875,
+                    y: 0.90277099609375,
+                  },
+                });
+
+            // รอหน้าต่างย่อย Export โหลด
+            await new Promise(r => setTimeout(r, 2000));
+
+            console.log('   Selecting CSV Option (via Keyboard)...');
+            await targetPage.keyboard.down('ArrowDown');
+            await targetPage.keyboard.up('ArrowDown');
+            await new Promise(r => setTimeout(r, 500));
+
+            await targetPage.keyboard.down('ArrowDown');
+            await targetPage.keyboard.up('ArrowDown');
+            await new Promise(r => setTimeout(r, 500));
+
+            await targetPage.keyboard.down('Enter');
+            await targetPage.keyboard.up('Enter');
+
+        } catch (e) {
+            console.log('⚠️ Search & Export error: ' + e.message);
         }
 
         console.log('   Waiting for CSV file...');
@@ -391,7 +394,3 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
-
-
-
-
