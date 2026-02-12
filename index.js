@@ -187,7 +187,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
             // 2. คลิกเลือก "กลุ่มทั้งหมด"
             await puppeteer.Locator.race([
                 targetPage.locator('::-p-aria(กลุ่มทั้งหมด[role="option"]) >>>> ::-p-aria([role="generic"])'),
-
             ])
                 .setTimeout(timeout)
                 .click({
@@ -280,15 +279,68 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         // 3.5 Speed
         console.log('   Setting Speed 55...');
-        await page.click(speedInputSelector, { clickCount: 3 });
-        await page.type(speedInputSelector, '55');
+        try {
+            const timeout = 5000;
+            const targetPage = page;
+            
+            await puppeteer.Locator.race([
+                targetPage.locator('::-p-aria([role="main"]) >>>> ::-p-aria([role="spinbutton"])'),
+                targetPage.locator('div:nth-of-type(8) input'),
+                targetPage.locator('::-p-xpath(//*[@id="app"]/div/main/div[2]/div/div[2]/div[2]/div/div/div[2]/div/div[8]/div[2]/div/input)'),
+                targetPage.locator(':scope >>> div:nth-of-type(8) input')
+            ])
+                .setTimeout(timeout)
+                .click({
+                  offset: {
+                    x: 49.35760498046875,
+                    y: 22.861083984375,
+                  },
+                });
+                
+            await puppeteer.Locator.race([
+                targetPage.locator('::-p-aria([role="main"]) >>>> ::-p-aria([role="spinbutton"])'),
+                targetPage.locator('div:nth-of-type(8) input'),
+                targetPage.locator('::-p-xpath(//*[@id="app"]/div/main/div[2]/div/div[2]/div[2]/div/div/div[2]/div/div[8]/div[2]/div/input)'),
+                targetPage.locator(':scope >>> div:nth-of-type(8) input')
+            ])
+                .setTimeout(timeout)
+                .fill('55');
+                
+            await targetPage.keyboard.down('Tab');
+            await targetPage.keyboard.up('Tab');
+            
+            await targetPage.keyboard.down('Tab');
+            await targetPage.keyboard.up('Tab');
+            
+            await targetPage.keyboard.down(' ');
+            await targetPage.keyboard.up(' ');
+            
+            await targetPage.keyboard.down('Tab');
+            await targetPage.keyboard.up('Tab');
+
+        } catch (e) {
+            console.log('⚠️ Speed configuration error: ' + e.message);
+        }
 
         // 3.6 Duration
         console.log('   Setting Duration 1 min...');
-        const durationInputSelector = 'div:nth-of-type(9) div.align-items-center > input';
-        if (await page.$(durationInputSelector)) {
-            await page.click(durationInputSelector, { clickCount: 3 });
-            await page.type(durationInputSelector, '1');
+        try {
+            const timeout = 5000;
+            const targetPage = page;
+            
+            await puppeteer.Locator.race([
+                targetPage.locator('div:nth-of-type(9) div.align-items-center > input'),
+                targetPage.locator('::-p-xpath(//*[@id="app"]/div/main/div[2]/div/div[2]/div[2]/div/div/div[2]/div/div[9]/div[2]/div[3]/input)'),
+                targetPage.locator(':scope >>> div:nth-of-type(9) div.align-items-center > input')
+            ])
+                .setTimeout(timeout)
+                .fill('1');
+
+            await targetPage.keyboard.down('Tab');
+            await targetPage.keyboard.up('Tab');
+            
+        } catch (e) {
+            console.log('⚠️ Duration configuration error: ' + e.message);
         }
 
         // ---------------------------------------------------------
@@ -377,7 +429,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
             from: `"DTC Bot" <${EMAIL_USER}>`,
             to: EMAIL_TO,
             subject: `รายงาน DTC Report (CSV) - ${new Date().toLocaleDateString()}`,
-            text: `ถึง ผู้เกี่ยวข้อง\nเรื่อง : ความเร็วเกินประจำวัน\n\nสิ่งที่แนบมา\nไฟล์รายงาน CSV: ${finalFile}\n\nด้วยความนับถือ\nBOT REPORT`,
+            text: `ถึง ผู้เกี่ยวข้อง\nเรื่อง : ความเร็วเกินประจำวัน\n\nสิ่งที่แนบมา\nไฟล์รายงาน CSV: ${finalFile}\n\nด้วยความนับถือ\nDTC BOT REPORT`,
             attachments: [{ filename: finalFile, path: path.join(downloadPath, finalFile) }]
         });
 
