@@ -168,58 +168,58 @@ const EMAIL_TO = process.env.EMAIL_TO;
             console.log('   Selected: กลุ่มทั้งหมด');
         } catch (e) { console.log('⚠️ Group selection skipped/failed: ' + e.message); }
 
-        // --- 3.3 เลือกรถ (Checkbox All) - SPACEBAR METHOD ---
-        console.log('   Selecting All Vehicles (Spacebar Method)...');
+        // --- 3.3 เลือกรถ (Shift + ArrowDown) [UPDATED FROM PUPPETEER RECORD] ---
+        console.log('   Selecting All Vehicles (Shift + ArrowDown up to 1000 items)...');
         try {
-            // 1. คลิกเปิด Dropdown (กรุณาเลือกรถ)
-            const vehicleSelectSelector = 'div.p-multiselect-label-container';
-            await page.waitForSelector(vehicleSelectSelector, { visible: true, timeout: 5000 });
-            await page.click(vehicleSelectSelector);
+            // 1. คลิกเปิด Dropdown (ใช้ Selector เป๊ะๆ จากไฟล์ step ข้อมูลรถ.txt)
+            const vehicleSelectTrigger = 'div.p-multiselect-label-container > div';
+            await page.waitForSelector('div.p-multiselect-label-container', { visible: true, timeout: 5000 });
+            
+            try {
+                await page.click(vehicleSelectTrigger);
+            } catch (clickErr) {
+                // Fallback เผื่อคลิก div ข้างในไม่ได้
+                await page.click('div.p-multiselect-label-container');
+            }
             console.log('   Opened Vehicle Multiselect.');
             
-            await new Promise(r => setTimeout(r, 1000));
+            // รอให้ Panel รายการรถปรากฏขึ้นมาจริงๆ
+            await page.waitForSelector('.p-multiselect-panel', { visible: true, timeout: 5000 });
+            await new Promise(r => setTimeout(r, 1000)); 
 
-            // 2. เช็คสถานะและกด Spacebar
-            const checkboxWrapperSelector = 'div.p-multiselect-header > div.p-checkbox';
-            const checkboxInputSelector = 'div.p-multiselect-header > div.p-checkbox > input';
+            // 2. เลื่อน Focus ไปที่รายการแรกตาม Record (กดลูกศรลง 1 ครั้ง)
+            await page.keyboard.press('ArrowDown');
+            await new Promise(r => setTimeout(r, 500));
+
+            // 3. กด Shift ค้างไว้ แล้วกดลงรัวๆ
+            console.log('   Holding Shift and pressing ArrowDown 1000 times...');
             
-            // รอให้ปุ่มปรากฏ
-            await page.waitForSelector(checkboxWrapperSelector, { visible: true, timeout: 5000 });
-
-            // ตรวจสอบว่าติ๊กอยู่แล้วหรือไม่
-            const isChecked = await page.evaluate((inputSel, wrapperSel) => {
-                const input = document.querySelector(inputSel);
-                const wrapper = document.querySelector(wrapperSel);
-                if (input && (input.checked || input.getAttribute('aria-label') === 'All items selected')) return true;
-                if (wrapper && wrapper.classList.contains('p-highlight')) return true;
-                return false;
-            }, checkboxInputSelector, checkboxWrapperSelector);
-
-            if (isChecked) {
-                console.log('   Checkbox ALREADY selected. Skipping.');
-            } else {
-                console.log('   Checkbox NOT selected. Pressing Spacebar...');
+            // ใช้ try...finally เพื่อประกันว่าปุ่ม Shift จะถูกปล่อยแน่นอน ป้องกันบั๊กคีย์บอร์ดค้าง
+            try {
+                await page.keyboard.down('Shift');
                 
-                // พยายาม Focus ไปที่ checkbox wrapper
-                // (บางครั้ง input ซ่อนอยู่ focus ไม่ได้ ต้อง focus ที่ wrapper)
-                try {
-                    await page.focus(checkboxWrapperSelector);
-                } catch (e) {
-                    // Fallback: ถ้า focus wrapper ไม่ได้ ลอง focus input
-                    await page.focus(checkboxInputSelector).catch(() => {});
+                // กำหนด 1000 ครั้งตาม Request
+                const numberOfTrucks = 1000; 
+                for (let i = 0; i < numberOfTrucks; i++) {
+                    await page.keyboard.press('ArrowDown');
+                    // ใส่ delay เล็กน้อยเพื่อให้ระบบรับทัน และไม่หน่วงเกินไป
+                    if (i % 100 === 0) await new Promise(r => setTimeout(r, 10)); 
                 }
-                
-                // กด Spacebar
-                await page.keyboard.press('Space');
-                console.log('   Pressed Spacebar.');
+                console.log('   Selection Loop Completed (1000 presses).');
+            } finally {
+                // *** สำคัญที่สุด: ปล่อยปุ่ม Shift ไม่ว่าจะเกิดอะไรขึ้น ***
+                await page.keyboard.up('Shift');
+                console.log('   Released Shift Key.');
             }
             
         } catch (e) {
-            console.log('⚠️ Checkbox selection error: ' + e.message);
+            console.log('⚠️ Vehicle selection error: ' + e.message);
+            await page.keyboard.up('Shift').catch(() => {}); // พยายามเคลียร์ปุ่มอีกรอบ
         }
         
         // ปิด Dropdown
         await page.keyboard.press('Escape');
+        await new Promise(r => setTimeout(r, 1000)); // พักนิดนึงก่อนไปช่องวันที่
 
         // --- 3.4 วันที่ (Date Range) ---
         console.log('   Setting Date Range...');
@@ -363,4 +363,5 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
 
