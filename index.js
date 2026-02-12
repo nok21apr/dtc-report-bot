@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Step 3.3: Shift + ArrowDown Method)...');
+    console.log('🚀 Starting Bot (Fix Shift Key & Date Overlay)...');
 
     /*
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
@@ -114,17 +114,14 @@ const EMAIL_TO = process.env.EMAIL_TO;
         if (!isFormReady) {
             console.log('   Selecting Status Info (Report Type)...');
             try {
-                // 1. คลิกเปิด Dropdown
                 const triggerXPath = "//div[contains(@class, 'scroll-main')]//div[4]//span[contains(@class, 'p-dropdown-label')] | //span[contains(text(), 'ความเร็วเกิน(กำหนดค่าเอง)')]";
                 await page.waitForXPath(triggerXPath, { visible: true, timeout: 10000 });
                 const [trigger] = await page.$x(triggerXPath);
                 if (trigger) await trigger.click();
                 else await page.click('div.scroll-main div.p-dropdown');
                 
-                // รอ List
                 await page.waitForSelector('.p-dropdown-items, [role="listbox"]', { visible: true, timeout: 5000 });
 
-                // 2. เลือก Item
                 const optionXPath = `
                     //li[@role='option'][@aria-label='ความเร็วเกิน(กำหนดค่าเอง)'] | 
                     //li[@role='option']//span[contains(text(), 'ความเร็วเกิน(กำหนดค่าเอง)')]
@@ -152,82 +149,96 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('   Waiting for Speed Input field...');
         await page.waitForSelector(speedInputSelector, { visible: true, timeout: 60000 });
         
-        // --- 3.2 เลือกกลุ่มรถ (Vehicle Group) ---
-        console.log('   Selecting Vehicle Group...');
+        // --- 3.2 & 3.3 เลือกกลุ่มรถและรถ (Strict Puppeteer Record Flow) ---
+        console.log('   Selecting Vehicle Group & All Vehicles (Strict Puppeteer Record)...');
         try {
-            await new Promise(r => setTimeout(r, 1000));
-            // คลิกเปิด Dropdown
-            const groupTrigger = 'div:nth-of-type(5) > div.flex-column span, div:nth-of-type(5) .p-dropdown';
-            await page.click(groupTrigger);
+            const timeout = 5000;
+            const targetPage = page;
+
+            // 1. คลิก Dropdown ข้อมูลกลุ่มรถ
+            await puppeteer.Locator.race([
+                targetPage.locator('div:nth-of-type(5) path'),
+                targetPage.locator('::-p-xpath(//*[@id="pv_id_40"]/div/svg/path)'),
+                targetPage.locator(':scope >>> div:nth-of-type(5) path')
+            ])
+                .setTimeout(timeout)
+                .click({
+                  offset: {
+                    x: 2.22296142578125,
+                    y: 2.8023681640625,
+                  },
+                });
+            
             await new Promise(r => setTimeout(r, 1000));
 
-            // เลือก Item
-            const groupOptionSelector = 'li[aria-label="กลุ่มทั้งหมด"]';
-            await page.waitForSelector(groupOptionSelector, { visible: true, timeout: 5000 });
-            await page.click(groupOptionSelector);
-            console.log('   Selected: กลุ่มทั้งหมด');
-        } catch (e) { console.log('⚠️ Group selection skipped/failed: ' + e.message); }
+            // 2. คลิกเลือก "กลุ่มทั้งหมด"
+            await puppeteer.Locator.race([
+                targetPage.locator('::-p-aria(กลุ่มทั้งหมด[role="option"]) >>>> ::-p-aria([role="generic"])'),
+                targetPage.locator('#pv_id_40_0 > span.p-dropdown-item-label'),
+                targetPage.locator('::-p-xpath(//*[@id="pv_id_40_0"]/span[1])'),
+                targetPage.locator(':scope >>> #pv_id_40_0 > span.p-dropdown-item-label')
+            ])
+                .setTimeout(timeout)
+                .click({
+                  offset: {
+                    x: 44.375,
+                    y: 11.27081298828125,
+                  },
+                });
 
-        // --- 3.3 เลือกรถ (Shift + ArrowDown) [UPDATED FROM PUPPETEER RECORD] ---
-        console.log('   Selecting All Vehicles (Shift + ArrowDown up to 1000 items)...');
-        try {
-            // 1. คลิกเปิด Dropdown (ใช้ Selector เป๊ะๆ จากไฟล์ step ข้อมูลรถ.txt)
-            const vehicleSelectTrigger = 'div.p-multiselect-label-container > div';
-            await page.waitForSelector('div.p-multiselect-label-container', { visible: true, timeout: 5000 });
-            
-            try {
-                await page.click(vehicleSelectTrigger);
-            } catch (clickErr) {
-                // Fallback เผื่อคลิก div ข้างในไม่ได้
-                await page.click('div.p-multiselect-label-container');
-            }
-            console.log('   Opened Vehicle Multiselect.');
-            
-            // 2. เลื่อน Focus ไปที่รายการแรกตาม Record (กดลูกศรลง 1 ครั้ง)
-            await page.keyboard.press('ArrowDown');
+            await new Promise(r => setTimeout(r, 1000));
+
+            // 3. กด Tab เพื่อไปที่ช่องกรุณาเลือกรถ
+            await targetPage.keyboard.down('Tab');
+            await targetPage.keyboard.up('Tab');
             await new Promise(r => setTimeout(r, 500));
 
-            // 3. กด Shift ค้างไว้ แล้วกดลงรัวๆ
+            // 4. กด Enter เพื่อเปิด Dropdown รถ
+            await targetPage.keyboard.down('Enter');
+            await targetPage.keyboard.up('Enter');
+            await new Promise(r => setTimeout(r, 1000)); // รอหน้าต่างกาง
+
+            // 5. กด ArrowDown 1 ครั้งเพื่อโฟกัสรายการแรก
+            await targetPage.keyboard.down('ArrowDown');
+            await targetPage.keyboard.up('ArrowDown');
+            await new Promise(r => setTimeout(r, 500));
+
+            // 6. กด Shift ค้าง และ ArrowDown 1000 ครั้ง
             console.log('   Holding Shift and pressing ArrowDown 1000 times...');
-            
-            // ใช้ try...finally เพื่อประกันว่าปุ่ม Shift จะถูกปล่อยแน่นอน ป้องกันบั๊กคีย์บอร์ดค้าง
             try {
-                await page.keyboard.down('Shift');
+                await targetPage.keyboard.down('Shift');
                 
-                // กำหนด 1000 ครั้งตาม Request
-                const numberOfTrucks = 1000; 
+                const numberOfTrucks = 1000;
                 for (let i = 0; i < numberOfTrucks; i++) {
-                    await page.keyboard.press('ArrowDown');
-                    // ใส่ delay เล็กน้อยเพื่อให้ระบบรับทัน และไม่หน่วงเกินไป
-                    if (i % 100 === 0) await new Promise(r => setTimeout(r, 10)); 
+                    await targetPage.keyboard.down('ArrowDown');
+                    await targetPage.keyboard.up('ArrowDown');
+                    // แทรกจังหวะพักนิดหน่อยให้บราวเซอร์ทำงานทัน ไม่ค้าง
+                    if (i % 50 === 0) await new Promise(r => setTimeout(r, 10)); 
                 }
-                console.log('   Selection Loop Completed (1000 presses).');
+                console.log('   Selection Loop Completed.');
             } finally {
-                // *** สำคัญที่สุด: ปล่อยปุ่ม Shift ไม่ว่าจะเกิดอะไรขึ้น ***
-                await page.keyboard.up('Shift');
+                // บังคับปล่อย Shift เสมอ ไม่ว่าสำเร็จหรือ Error
+                await targetPage.keyboard.up('Shift');
                 console.log('   Released Shift Key.');
             }
             
-        } catch (e) {
-            console.log('⚠️ Vehicle selection error: ' + e.message);
-            await page.keyboard.up('Shift').catch(() => {}); // พยายามเคลียร์ปุ่มอีกรอบ
-        }
-        
-        // ปิด Dropdown
-        await page.keyboard.press('Escape');
-        await new Promise(r => setTimeout(r, 1000)); // พักนิดนึงก่อนไปช่องวันที่
+            // ปิด Dropdown
+            await targetPage.keyboard.press('Escape');
+            await new Promise(r => setTimeout(r, 1000));
 
-        // --- 3.4 วันที่ (Date Range) ---
+        } catch (e) {
+            console.log('⚠️ Group/Vehicle selection error: ' + e.message);
+            await page.keyboard.up('Shift').catch(() => {});
+        }
+
+        // --- 3.4 วันที่ (Date Range) [SAFE CLEAR] ---
         console.log('   Setting Date Range...');
         const now = new Date();
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth(); 
         
-        // Start Date: 1st of current month - 2 days
         const startDate = new Date(currentYear, currentMonth, 1);
         startDate.setDate(startDate.getDate() - 2); 
-        
-        // End Date: Last day of current month
         const endDate = new Date(currentYear, currentMonth + 1, 0); 
         
         const pad = (n) => n < 10 ? '0' + n : n;
@@ -245,8 +256,14 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log(`      Date: ${fullDateString}`);
 
         const dateInputSelector = 'div:nth-of-type(7) input';
-        await page.click(dateInputSelector, { clickCount: 3 });
-        await page.keyboard.press('Backspace');
+        
+        // ใช้วิธีล้างค่าด้วย JavaScript โดยตรง (แก้ปัญหาพิมพ์ซ้อน)
+        await page.evaluate((selector) => {
+            const input = document.querySelector(selector);
+            if (input) input.value = '';
+        }, dateInputSelector);
+        
+        // พิมพ์ค่าใหม่ลงไป
         await page.type(dateInputSelector, fullDateString, { delay: 10 });
         await page.keyboard.press('Tab');
 
@@ -332,7 +349,10 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log(`✅ File Downloaded: ${finalFile}`);
         await browser.close();
 
-        console.log('📧 Sending Email...');
+        // ---------------------------------------------------------
+        // Step 7: Email
+        // ---------------------------------------------------------
+        console.log('📧 Step 7: Sending Email...');
         const transporter = nodemailer.createTransport({
             service: 'gmail',
             auth: { user: EMAIL_USER, pass: EMAIL_PASS }
@@ -359,6 +379,3 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
-
-
-
