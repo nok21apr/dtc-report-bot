@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Fix Shift Key & Date Overlay)...');
+    console.log('🚀 Starting Bot (Step 3.3: Shift + ArrowDown Method)...');
 
     /*
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
@@ -114,14 +114,17 @@ const EMAIL_TO = process.env.EMAIL_TO;
         if (!isFormReady) {
             console.log('   Selecting Status Info (Report Type)...');
             try {
+                // 1. คลิกเปิด Dropdown
                 const triggerXPath = "//div[contains(@class, 'scroll-main')]//div[4]//span[contains(@class, 'p-dropdown-label')] | //span[contains(text(), 'ความเร็วเกิน(กำหนดค่าเอง)')]";
                 await page.waitForXPath(triggerXPath, { visible: true, timeout: 10000 });
                 const [trigger] = await page.$x(triggerXPath);
                 if (trigger) await trigger.click();
                 else await page.click('div.scroll-main div.p-dropdown');
                 
+                // รอ List
                 await page.waitForSelector('.p-dropdown-items, [role="listbox"]', { visible: true, timeout: 5000 });
 
+                // 2. เลือก Item
                 const optionXPath = `
                     //li[@role='option'][@aria-label='ความเร็วเกิน(กำหนดค่าเอง)'] | 
                     //li[@role='option']//span[contains(text(), 'ความเร็วเกิน(กำหนดค่าเอง)')]
@@ -158,21 +161,12 @@ const EMAIL_TO = process.env.EMAIL_TO;
             await page.click(groupTrigger);
             await new Promise(r => setTimeout(r, 1000));
 
-            // เลือก Item (เน้น Aria Label เพื่อความแม่นยำ)
-            // เพิ่มการรอและคลิกให้ชัดเจนขึ้น
+            // เลือก Item
             const groupOptionSelector = 'li[aria-label="กลุ่มทั้งหมด"]';
             await page.waitForSelector(groupOptionSelector, { visible: true, timeout: 5000 });
             await page.click(groupOptionSelector);
             console.log('   Selected: กลุ่มทั้งหมด');
-        } catch (e) { 
-            console.log('⚠️ Group selection error: ' + e.message);
-            // Fallback ถ้าเลือกผิด
-            console.log('   Trying text fallback for Group...');
-            try {
-                const groupOpt = await page.$x("//li//span[contains(text(), 'กลุ่มทั้งหมด')]");
-                if (groupOpt.length > 0) await groupOpt[0].click();
-            } catch(ex) {}
-        } 
+        } catch (e) { console.log('⚠️ Group selection skipped/failed: ' + e.message); }
 
         // --- 3.3 เลือกรถ (Shift + ArrowDown) ---
         console.log('   Selecting All Vehicles (Shift + ArrowDown)...');
@@ -187,7 +181,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
             // 2. เลื่อน Focus ไปที่รายการแรก (กดลง 1 ครั้ง)
             await page.keyboard.press('ArrowDown');
-            await new Promise(r => setTimeout(r, 1000));
+            await new Promise(r => setTimeout(r, 500));
 
             // 3. กด Shift ค้างไว้ แล้วกดลงรัวๆ
             console.log('   Holding Shift and pressing ArrowDown...');
@@ -211,16 +205,18 @@ const EMAIL_TO = process.env.EMAIL_TO;
         
         // ปิด Dropdown (กด ESC)
         await page.keyboard.press('Escape');
-        await new Promise(r => setTimeout(r, 1000)); // พักนิดนึงก่อนไปช่องวันที่
 
-        // --- 3.4 วันที่ (Date Range) [SAFE CLEAR] ---
+        // --- 3.4 วันที่ (Date Range) ---
         console.log('   Setting Date Range...');
         const now = new Date();
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth(); 
         
+        // Start Date: 1st of current month - 2 days
         const startDate = new Date(currentYear, currentMonth, 1);
         startDate.setDate(startDate.getDate() - 2); 
+        
+        // End Date: Last day of current month
         const endDate = new Date(currentYear, currentMonth + 1, 0); 
         
         const pad = (n) => n < 10 ? '0' + n : n;
@@ -238,14 +234,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log(`      Date: ${fullDateString}`);
 
         const dateInputSelector = 'div:nth-of-type(7) input';
-        
-        // ใช้วิธีล้างค่าด้วย JavaScript โดยตรง (แก้ปัญหาพิมพ์ซ้อน)
-        await page.evaluate((selector) => {
-            const input = document.querySelector(selector);
-            if (input) input.value = '';
-        }, dateInputSelector);
-        
-        // พิมพ์ค่าใหม่ลงไป
+        await page.click(dateInputSelector, { clickCount: 3 });
+        await page.keyboard.press('Backspace');
         await page.type(dateInputSelector, fullDateString, { delay: 10 });
         await page.keyboard.press('Tab');
 
@@ -331,10 +321,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log(`✅ File Downloaded: ${finalFile}`);
         await browser.close();
 
-        // ---------------------------------------------------------
-        // Step 7: Email
-        // ---------------------------------------------------------
-        console.log('📧 Step 7: Sending Email...');
+        console.log('📧 Sending Email...');
         const transporter = nodemailer.createTransport({
             service: 'gmail',
             auth: { user: EMAIL_USER, pass: EMAIL_PASS }
@@ -361,4 +348,3 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
-
