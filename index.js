@@ -114,26 +114,36 @@ const EMAIL_TO = process.env.EMAIL_TO;
         if (!isFormReady) {
             console.log('   Selecting Status Info (Report Type)...');
             try {
-                const triggerXPath = "//div[contains(@class, 'scroll-main')]//div[4]//span[contains(@class, 'p-dropdown-label')] | //span[contains(text(), 'ความเร็วเกิน(กำหนดค่าเอง)')]";
-                await page.waitForXPath(triggerXPath, { visible: true, timeout: 10000 });
-                const [trigger] = await page.$x(triggerXPath);
-                if (trigger) await trigger.click();
-                else await page.click('div.scroll-main div.p-dropdown');
+                // 1. click ที่ "p-dropdown-label p-inputtext text-lg"
+                const triggerSelector = '.p-dropdown-label.p-inputtext.text-lg';
+                await page.waitForSelector(triggerSelector, { visible: true, timeout: 10000 });
+                await page.evaluate((sel) => {
+                    const el = document.querySelector(sel);
+                    if (el) el.click();
+                }, triggerSelector);
                 
-                await page.waitForSelector('.p-dropdown-items, [role="listbox"]', { visible: true, timeout: 5000 });
+                await new Promise(r => setTimeout(r, 1000));
 
-                const optionXPath = `
-                    //li[@role='option'][@aria-label='ความเร็วเกิน(กำหนดค่าเอง)'] | 
-                    //li[@role='option']//span[contains(text(), 'ความเร็วเกิน(กำหนดค่าเอง)')]
-                `;
-                await page.waitForXPath(optionXPath, { visible: true, timeout: 5000 });
-                const [option] = await page.$x(optionXPath);
-                if (option) {
-                    await option.click();
-                    console.log('   Selected: ความเร็วเกิน(กำหนดค่าเอง)');
-                } else {
-                    throw new Error('Option element not found in list');
+                // 2. click ที่ "p-dropdown-filter p-inputtext p-component"
+                const filterSelector = '.p-dropdown-filter.p-inputtext.p-component';
+                await page.waitForSelector(filterSelector, { visible: true, timeout: 5000 });
+                await page.click(filterSelector);
+                
+                await new Promise(r => setTimeout(r, 500));
+
+                // 3. กดลง 3 ครั้ง
+                console.log('   Pressing ArrowDown 3 times...');
+                for (let i = 0; i < 3; i++) {
+                    await page.keyboard.press('ArrowDown');
+                    await new Promise(r => setTimeout(r, 200));
                 }
+
+                // 4. กด enter
+                console.log('   Pressing Enter...');
+                await page.keyboard.press('Enter');
+                
+                console.log('   Selected: Report Type (via Keyboard).');
+                
             } catch (e) {
                 console.error('⚠️ Error selecting report type:', e.message);
                 try {
@@ -377,5 +387,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
 
 
