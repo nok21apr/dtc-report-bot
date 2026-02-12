@@ -148,6 +148,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // รอฟอร์มโหลด
         console.log('   Waiting for Speed Input field...');
         await page.waitForSelector(speedInputSelector, { visible: true, timeout: 60000 });
+
         
         // --- 3.2 & 3.3 เลือกกลุ่มรถและรถ (Strict Puppeteer Record Flow) ---
         console.log('   Selecting Vehicle Group & All Vehicles (Strict Puppeteer Record)...');
@@ -376,4 +377,5 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
 
