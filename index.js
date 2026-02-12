@@ -174,55 +174,42 @@ const EMAIL_TO = process.env.EMAIL_TO;
             } catch(ex) {}
         } 
 
-        // --- 3.3 เลือกรถ (Shift + ArrowDown) [SAFE MODE] ---
+        // --- 3.3 เลือกรถ (Shift + ArrowDown) ---
         console.log('   Selecting All Vehicles (Shift + ArrowDown)...');
         try {
-            // 1. คลิกเปิด Dropdown
+            // 1. คลิกเปิด Dropdown (กรุณาเลือกรถ)
             const vehicleSelectSelector = 'div.p-multiselect-label-container';
             await page.waitForSelector(vehicleSelectSelector, { visible: true, timeout: 5000 });
             await page.click(vehicleSelectSelector);
             console.log('   Opened Vehicle Multiselect.');
             
-            // รอให้ Panel รายการรถปรากฏขึ้นมาจริงๆ (สำคัญมาก)
-            await page.waitForSelector('.p-multiselect-panel', { visible: true, timeout: 5000 });
-            await new Promise(r => setTimeout(r, 1000)); 
+            await new Promise(r => setTimeout(r, 1000)); // รอ Animation Dropdown
 
-            // 2. เลื่อน Focus ไปที่รายการแรก
-            // คลิกที่ Filter input หรือ header เพื่อให้แน่ใจว่า focus อยู่ใน component
-            const filterInput = 'div.p-multiselect-filter-container > input';
-            if (await page.$(filterInput)) {
-                await page.click(filterInput);
-                await page.keyboard.press('ArrowDown'); // เลื่อนจาก Filter ลงไปหารายการรถ
-            } else {
-                await page.keyboard.press('ArrowDown');
-            }
-            await new Promise(r => setTimeout(r, 500));
+            // 2. เลื่อน Focus ไปที่รายการแรก (กดลง 1 ครั้ง)
+            await page.keyboard.press('ArrowDown');
+            await new Promise(r => setTimeout(r, 1000));
 
             // 3. กด Shift ค้างไว้ แล้วกดลงรัวๆ
             console.log('   Holding Shift and pressing ArrowDown...');
-            
-            // ใช้ try...finally เพื่อประกันว่าปุ่ม Shift จะถูกปล่อยแน่นอน
-            try {
-                await page.keyboard.down('Shift');
-                const numberOfTrucks = 1000; 
-                for (let i = 0; i < numberOfTrucks; i++) {
-                    await page.keyboard.press('ArrowDown');
-                    if (i % 50 === 0) await new Promise(r => setTimeout(r, 10)); 
-                }
-                console.log('   Selection Loop Completed.');
-            } finally {
-                // *** สำคัญที่สุด: ปล่อยปุ่ม Shift ไม่ว่าจะเกิดอะไรขึ้น ***
-                await page.keyboard.up('Shift');
-                console.log('   Released Shift Key.');
+            await page.keyboard.down('Shift');
+
+            // ปรับจำนวนครั้งเป็น 1000 ตามที่ต้องการ
+            const numberOfTrucks = 1000; 
+            for (let i = 0; i < numberOfTrucks; i++) {
+                await page.keyboard.press('ArrowDown');
+                // ใส่ delay เล็กน้อยมากเพื่อให้ระบบรับทัน (แต่เร็วพอ)
+                if (i % 50 === 0) await new Promise(r => setTimeout(r, 10)); 
             }
+
+            // 4. ปล่อย Shift
+            await page.keyboard.up('Shift');
+            console.log('   Selection Loop Completed (1000 items).');
             
         } catch (e) {
             console.log('⚠️ Vehicle selection error: ' + e.message);
-            // พยายามปล่อย Shift อีกครั้งเผื่อหลุดจาก try block
-            await page.keyboard.up('Shift');
         }
         
-        // ปิด Dropdown
+        // ปิด Dropdown (กด ESC)
         await page.keyboard.press('Escape');
         await new Promise(r => setTimeout(r, 1000)); // พักนิดนึงก่อนไปช่องวันที่
 
@@ -374,3 +361,4 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
