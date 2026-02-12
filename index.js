@@ -308,15 +308,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
                 
             await targetPage.keyboard.down('Tab');
             await targetPage.keyboard.up('Tab');
-            
-            await targetPage.keyboard.down('Tab');
-            await targetPage.keyboard.up('Tab');
-            
-            await targetPage.keyboard.down(' ');
-            await targetPage.keyboard.up(' ');
-            
-            await targetPage.keyboard.down('Tab');
-            await targetPage.keyboard.up('Tab');
 
         } catch (e) {
             console.log('⚠️ Speed configuration error: ' + e.message);
@@ -329,9 +320,54 @@ const EMAIL_TO = process.env.EMAIL_TO;
             const targetPage = page;
             
             await puppeteer.Locator.race([
+                targetPage.locator('::-p-aria(\\(กม./ชม\\) ระบุ นาที)'),
+                targetPage.locator('#customselect'),
+                targetPage.locator('::-p-xpath(//*[@id="customselect"])'),
+                targetPage.locator(':scope >>> #customselect')
+            ])
+                .setTimeout(timeout)
+                .click({
+                  offset: {
+                    x: 10.45135498046875,
+                    y: 7.1180419921875,
+                  },
+                });
+
+            await puppeteer.Locator.race([
                 targetPage.locator('div:nth-of-type(9) div.align-items-center > input'),
                 targetPage.locator('::-p-xpath(//*[@id="app"]/div/main/div[2]/div/div[2]/div[2]/div/div/div[2]/div/div[9]/div[2]/div[3]/input)'),
-                targetPage.locator(':scope >>> div:nth-of-type(9) div.align-items-center > input')
+                targetPage.locator(':scope >>> div:nth-of-type(9) div.align-items-center > input'),
+                targetPage.locator('::-p-text(10)')
+            ])
+                .setTimeout(timeout)
+                .click({
+                  offset: {
+                    x: 46.8367919921875,
+                    y: 17.65966796875,
+                  },
+                });
+
+            await puppeteer.Locator.race([
+                targetPage.locator('div:nth-of-type(9) div.align-items-center > input'),
+                targetPage.locator('::-p-xpath(//*[@id="app"]/div/main/div[2]/div/div[2]/div[2]/div/div/div[2]/div/div[9]/div[2]/div[3]/input)'),
+                targetPage.locator(':scope >>> div:nth-of-type(9) div.align-items-center > input'),
+                targetPage.locator('::-p-text(10)')
+            ])
+                .setTimeout(timeout)
+                .fill('');
+
+            await targetPage.keyboard.down('Backspace');
+            await targetPage.keyboard.up('Backspace');
+            await targetPage.keyboard.down('Backspace');
+            await targetPage.keyboard.up('Backspace');
+            await targetPage.keyboard.down('Backspace');
+            await targetPage.keyboard.up('Backspace');
+
+            await puppeteer.Locator.race([
+                targetPage.locator('div:nth-of-type(9) div.align-items-center > input'),
+                targetPage.locator('::-p-xpath(//*[@id="app"]/div/main/div[2]/div/div[2]/div[2]/div/div/div[2]/div/div[9]/div[2]/div[3]/input)'),
+                targetPage.locator(':scope >>> div:nth-of-type(9) div.align-items-center > input'),
+                targetPage.locator('::-p-text(10)')
             ])
                 .setTimeout(timeout)
                 .fill('1');
@@ -446,3 +482,4 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
