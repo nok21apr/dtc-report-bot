@@ -407,10 +407,27 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('4️⃣ Step 4: Search & Export...');
         
         try {
-            const timeout = 10000;
+            const timeout = 5000;
             const targetPage = page;
 
-            console.log('   Clicking Search Button...');
+            console.log('   Clicking Search Button (1/2)...');
+            await puppeteer.Locator.race([
+                targetPage.locator('div.flex > div.h-full > div > div > div.flex > button:nth-of-type(2) > div > span'),
+                targetPage.locator('::-p-xpath(//*[@id="app"]/div/main/div[2]/div/div[2]/div[2]/div/div/div[4]/button[2]/div/span)'),
+                targetPage.locator(':scope >>> div.flex > div.h-full > div > div > div.flex > button:nth-of-type(2) > div > span')
+            ])
+                .setTimeout(timeout)
+                .click({
+                  offset: {
+                    x: 5.3089599609375,
+                    y: 7.21527099609375,
+                  },
+                });
+
+            // รอ 1 วินาทีก่อนกดครั้งที่ 2
+            await new Promise(r => setTimeout(r, 1000));
+
+            console.log('   Clicking Search Button (2/2)...');
             await puppeteer.Locator.race([
                 targetPage.locator('div.flex > div.h-full > div > div > div.flex > button:nth-of-type(2) > div > span'),
                 targetPage.locator('::-p-xpath(//*[@id="app"]/div/main/div[2]/div/div[2]/div[2]/div/div/div[4]/button[2]/div/span)'),
@@ -504,5 +521,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
 
 
