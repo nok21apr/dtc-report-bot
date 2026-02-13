@@ -42,8 +42,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
         });
 
         page = await browser.newPage();
-        page.setDefaultNavigationTimeout(300000);
-        page.setDefaultTimeout(300000);
+        page.setDefaultNavigationTimeout(600000);
+        page.setDefaultTimeout(600000);
         await page.setViewport({ width: 1920, height: 1080 });
         await page.emulateTimezone('Asia/Bangkok');
         
@@ -75,7 +75,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
             return false;
         });
 
-        await page.waitForFunction(() => !document.querySelector('#Username'), { timeout: 90000 });
+        await page.waitForFunction(() => !document.querySelector('#Username'), { timeout: 10000 });
         console.log('✅ Login Success');
         await new Promise(r => setTimeout(r, 2000));
 
@@ -94,7 +94,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         }
 
         try {
-            await page.waitForSelector('div.layout-main, div.layout-menu-container', { timeout: 20000 });
+            await page.waitForSelector('div.layout-main, div.layout-menu-container', { timeout: 30000 });
         } catch(e) { console.log('⚠️ Page structure wait warning.'); }
 
         // ---------------------------------------------------------
@@ -107,14 +107,14 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // --- 3.1 เลือกข้อมูลสถานะ (Report Type) ---
         let isFormReady = false;
         try {
-            await page.waitForSelector(speedInputSelector, { visible: true, timeout: 5000 });
+            await page.waitForSelector(speedInputSelector, { visible: true, timeout: 10000 });
             isFormReady = true;
         } catch(e) {}
         
         if (!isFormReady) {
             console.log('   Selecting Status Info (Report Type)...');
             try {
-                const timeout = 5000;
+                const timeout = 10000;
                 const targetPage = page;
                 
                 // 1. คลิก Dropdown (แก้ไขตาม Code แนบ)
@@ -177,7 +177,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // --- 3.2 & 3.3 เลือกกลุ่มรถและรถ (Strict Puppeteer Record Flow) ---
         console.log('   Selecting Vehicle Group & All Vehicles (Strict Puppeteer Record)...');
         try {
-            const timeout = 5000;
+            const timeout = 10000;
             const targetPage = page;
 
             // 1. คลิก Dropdown ข้อมูลกลุ่มรถ
@@ -198,9 +198,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
             // 2. คลิกเลือก "กลุ่มทั้งหมด"
             await puppeteer.Locator.race([
-                targetPage.locator('::-p-aria(กลุ่มทั้งหมด[role="option"]) >>>> ::-p-aria([role="generic"])'),
-                targetPage.locator('#pv_id_40_0 > span.p-dropdown-item-label'),
-                targetPage.locator('::-p-xpath(//*[@id="pv_id_40_0"]/span[1])'),
+                targetPage.locator('::-p-aria(กลุ่มทั้งหมด[role="option"]) >>>> ::-p-aria([role="generic"])'),    
                 targetPage.locator(':scope >>> #pv_id_40_0 > span.p-dropdown-item-label')
             ])
                 .setTimeout(timeout)
@@ -211,12 +209,12 @@ const EMAIL_TO = process.env.EMAIL_TO;
                   },
                 });
 
-            await new Promise(r => setTimeout(r, 1000));
+            await new Promise(r => setTimeout(r, 10000));
 
             // 3. กด Tab เพื่อไปที่ช่องกรุณาเลือกรถ
             await targetPage.keyboard.down('Tab');
             await targetPage.keyboard.up('Tab');
-            await new Promise(r => setTimeout(r, 500));
+            await new Promise(r => setTimeout(r, 1000));
 
             // 4. กด Enter เพื่อเปิด Dropdown รถ
             await targetPage.keyboard.down('Enter');
@@ -226,7 +224,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
             // 5. กด ArrowDown 1 ครั้งเพื่อโฟกัสรายการแรก
             await targetPage.keyboard.down('ArrowDown');
             await targetPage.keyboard.up('ArrowDown');
-            await new Promise(r => setTimeout(r, 500));
+            await new Promise(r => setTimeout(r, 1000));
 
             // 6. กด Shift ค้าง และ ArrowDown 1000 ครั้ง
             console.log('   Holding Shift and pressing ArrowDown 1000 times...');
@@ -409,7 +407,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('4️⃣ Step 4: Search & Export...');
         
         try {
-            const timeout = 5000;
+            const timeout = 10000;
             const targetPage = page;
 
             console.log('   Clicking Search Button...');
@@ -428,7 +426,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
             console.log('   Waiting for Data...');
             // รอให้ตารางข้อมูลโหลดเสร็จก่อนค่อยกด Export
-            await new Promise(r => setTimeout(r, 420000)); 
+            await new Promise(r => setTimeout(r, 400000)); 
 
             console.log('   Clicking Export Menu...');
             await puppeteer.Locator.race([
@@ -444,16 +442,16 @@ const EMAIL_TO = process.env.EMAIL_TO;
                 });
 
             // รอหน้าต่างย่อย Export โหลด
-            await new Promise(r => setTimeout(r, 2000));
+            await new Promise(r => setTimeout(r, 10000));
 
             console.log('   Selecting CSV Option (via Keyboard)...');
             await targetPage.keyboard.down('ArrowDown');
             await targetPage.keyboard.up('ArrowDown');
-            await new Promise(r => setTimeout(r, 500));
+            await new Promise(r => setTimeout(r, 1000));
 
             await targetPage.keyboard.down('ArrowDown');
             await targetPage.keyboard.up('ArrowDown');
-            await new Promise(r => setTimeout(r, 500));
+            await new Promise(r => setTimeout(r, 1000));
 
             await targetPage.keyboard.down('Enter');
             await targetPage.keyboard.up('Enter');
@@ -506,4 +504,5 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
 
