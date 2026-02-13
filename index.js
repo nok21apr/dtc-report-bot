@@ -428,7 +428,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
             console.log('   Waiting for Data...');
             // รอให้ตารางข้อมูลโหลดเสร็จก่อนค่อยกด Export
-            await new Promise(r => setTimeout(r, 240000)); 
+            await new Promise(r => setTimeout(r, 420000)); 
 
             console.log('   Clicking Export Menu...');
             await puppeteer.Locator.race([
@@ -506,3 +506,4 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
