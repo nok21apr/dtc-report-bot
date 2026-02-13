@@ -107,48 +107,37 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // --- 3.1 เลือกข้อมูลสถานะ (Report Type) ---
         let isFormReady = false;
         try {
-            await page.waitForSelector(speedInputSelector, { visible: true, timeout: 5000 });
+            await page.waitForSelector(speedInputSelector, { visible: true, timeout: 10000 });
             isFormReady = true;
         } catch(e) {}
         
         if (!isFormReady) {
             console.log('   Selecting Status Info (Report Type)...');
             try {
-                const timeout = 5000;
+                const timeout = 10000;
                 const targetPage = page;
                 
-                // 1. คลิก Dropdown (แก้ไขตาม Code แนบ)
                 await puppeteer.Locator.race([
-                    targetPage.locator('::-p-aria(รถวิ่ง)'),
+                    targetPage.locator('::-p-aria(ความเร็วเกิน\\(กำหนดค่าเอง\\))'),
                     targetPage.locator('div:nth-of-type(4) > div.flex-column span'),
                     targetPage.locator(':scope >>> div:nth-of-type(4) > div.flex-column span'),
-                    targetPage.locator('::-p-text(รถวิ่ง)')
+                    targetPage.locator('::-p-text(ความเร็วเกิน\\(กำหนดค่าเอง\\))')
                 ])
                     .setTimeout(timeout)
                     .click({
                       offset: {
-                        x: 416.24652099609375,
-                        y: 9.86456298828125,
+                        x: 296.24652099609375,
+                        y: 12.86456298828125,
                       },
                     });
 
-                // 2. พิมพ์ค้นหา (แก้ไขตาม Code แนบ)
-                await puppeteer.Locator.race([
-                    targetPage.locator('div.p-dropdown-panel input'),
-                    targetPage.locator('::-p-xpath(/html/body/div[4]/div[1]/div/input)'),
-                    targetPage.locator(':scope >>> div.p-dropdown-panel input')
-                ])
-                    .setTimeout(timeout)
-                    .fill('ความเร็วเกิน(กำหนดค่าเอง)');
+                await new Promise(r => setTimeout(r, 1000));
 
-                // 3. เลือกรายการ (แก้ไขตาม Code แนบ: ArrowDown -> ArrowUp -> Enter -> Up)
-                // ตาม Code ที่แนบมา: Down, Up, Enter, Up 
-                // แต่ปกติการเลือก dropdown ต้องกด Down ไปที่ item แล้ว Enter
-                // Code แนบ:
-                // await targetPage.keyboard.down('ArrowDown');
-                // await targetPage.keyboard.up('ArrowDown');
-                // await targetPage.keyboard.down('Enter');
-                // await targetPage.keyboard.up('Enter');
+                await targetPage.keyboard.down('ArrowDown');
+                await targetPage.keyboard.up('ArrowDown');
+                
+                await targetPage.keyboard.down('ArrowDown');
+                await targetPage.keyboard.up('ArrowDown');
                 
                 await targetPage.keyboard.down('ArrowDown');
                 await targetPage.keyboard.up('ArrowDown');
@@ -156,9 +145,9 @@ const EMAIL_TO = process.env.EMAIL_TO;
                 await targetPage.keyboard.down('Enter');
                 await targetPage.keyboard.up('Enter');
                 
-                console.log('   Selected: Report Type (via Puppeteer Record Flow with Filter).');
+                console.log('   Selected: Report Type (via Puppeteer Record Flow).');
                 
-                await new Promise(r => setTimeout(r, 1000));
+                await new Promise(r => setTimeout(r, 2000));
             } catch (e) {
                 console.error('⚠️ Error selecting report type:', e.message);
                 try {
@@ -415,7 +404,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
             console.log('   Waiting for Data...');
             // รอให้ตารางข้อมูลโหลดเสร็จก่อนค่อยกด Export
-            await new Promise(r => setTimeout(r, 200000)); 
+            await new Promise(r => setTimeout(r, 240000)); 
 
             console.log('   Clicking Export Menu...');
             await puppeteer.Locator.race([
@@ -493,10 +482,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
-
-
-
-
 
 
 
