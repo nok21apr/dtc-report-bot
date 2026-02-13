@@ -107,37 +107,48 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // --- 3.1 เลือกข้อมูลสถานะ (Report Type) ---
         let isFormReady = false;
         try {
-            await page.waitForSelector(speedInputSelector, { visible: true, timeout: 10000 });
+            await page.waitForSelector(speedInputSelector, { visible: true, timeout: 5000 });
             isFormReady = true;
         } catch(e) {}
         
         if (!isFormReady) {
             console.log('   Selecting Status Info (Report Type)...');
             try {
-                const timeout = 10000;
+                const timeout = 5000;
                 const targetPage = page;
                 
+                // 1. คลิก Dropdown (แก้ไขตาม Code แนบ)
                 await puppeteer.Locator.race([
-                    targetPage.locator('::-p-aria(ความเร็วเกิน\\(กำหนดค่าเอง\\))'),
+                    targetPage.locator('::-p-aria(รถวิ่ง)'),
                     targetPage.locator('div:nth-of-type(4) > div.flex-column span'),
                     targetPage.locator(':scope >>> div:nth-of-type(4) > div.flex-column span'),
-                    targetPage.locator('::-p-text(ความเร็วเกิน\\(กำหนดค่าเอง\\))')
+                    targetPage.locator('::-p-text(รถวิ่ง)')
                 ])
                     .setTimeout(timeout)
                     .click({
                       offset: {
-                        x: 296.24652099609375,
-                        y: 12.86456298828125,
+                        x: 416.24652099609375,
+                        y: 9.86456298828125,
                       },
                     });
 
-                await new Promise(r => setTimeout(r, 1000));
+                // 2. พิมพ์ค้นหา (แก้ไขตาม Code แนบ)
+                await puppeteer.Locator.race([
+                    targetPage.locator('div.p-dropdown-panel input'),
+                    targetPage.locator('::-p-xpath(/html/body/div[4]/div[1]/div/input)'),
+                    targetPage.locator(':scope >>> div.p-dropdown-panel input')
+                ])
+                    .setTimeout(timeout)
+                    .fill('ความเร็วเกิน(กำหนดค่าเอง)');
 
-                await targetPage.keyboard.down('ArrowDown');
-                await targetPage.keyboard.up('ArrowDown');
-                
-                await targetPage.keyboard.down('ArrowDown');
-                await targetPage.keyboard.up('ArrowDown');
+                // 3. เลือกรายการ (แก้ไขตาม Code แนบ: ArrowDown -> ArrowUp -> Enter -> Up)
+                // ตาม Code ที่แนบมา: Down, Up, Enter, Up 
+                // แต่ปกติการเลือก dropdown ต้องกด Down ไปที่ item แล้ว Enter
+                // Code แนบ:
+                // await targetPage.keyboard.down('ArrowDown');
+                // await targetPage.keyboard.up('ArrowDown');
+                // await targetPage.keyboard.down('Enter');
+                // await targetPage.keyboard.up('Enter');
                 
                 await targetPage.keyboard.down('ArrowDown');
                 await targetPage.keyboard.up('ArrowDown');
@@ -145,9 +156,9 @@ const EMAIL_TO = process.env.EMAIL_TO;
                 await targetPage.keyboard.down('Enter');
                 await targetPage.keyboard.up('Enter');
                 
-                console.log('   Selected: Report Type (via Puppeteer Record Flow).');
+                console.log('   Selected: Report Type (via Puppeteer Record Flow with Filter).');
                 
-                await new Promise(r => setTimeout(r, 2000));
+                await new Promise(r => setTimeout(r, 1000));
             } catch (e) {
                 console.error('⚠️ Error selecting report type:', e.message);
                 try {
@@ -172,6 +183,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
             // 1. คลิก Dropdown ข้อมูลกลุ่มรถ
             await puppeteer.Locator.race([
                 targetPage.locator('div:nth-of-type(5) path'),
+                targetPage.locator('::-p-xpath(//*[@id="pv_id_40"]/div/svg/path)'),
                 targetPage.locator(':scope >>> div:nth-of-type(5) path')
             ])
                 .setTimeout(timeout)
@@ -187,6 +199,9 @@ const EMAIL_TO = process.env.EMAIL_TO;
             // 2. คลิกเลือก "กลุ่มทั้งหมด"
             await puppeteer.Locator.race([
                 targetPage.locator('::-p-aria(กลุ่มทั้งหมด[role="option"]) >>>> ::-p-aria([role="generic"])'),
+                targetPage.locator('#pv_id_40_0 > span.p-dropdown-item-label'),
+                targetPage.locator('::-p-xpath(//*[@id="pv_id_40_0"]/span[1])'),
+                targetPage.locator(':scope >>> #pv_id_40_0 > span.p-dropdown-item-label')
             ])
                 .setTimeout(timeout)
                 .click({
@@ -306,6 +321,15 @@ const EMAIL_TO = process.env.EMAIL_TO;
                 .setTimeout(timeout)
                 .fill('55');
                 
+            await targetPage.keyboard.down('Tab');
+            await targetPage.keyboard.up('Tab');
+            
+            await targetPage.keyboard.down('Tab');
+            await targetPage.keyboard.up('Tab');
+            
+            await targetPage.keyboard.down(' ');
+            await targetPage.keyboard.up(' ');
+            
             await targetPage.keyboard.down('Tab');
             await targetPage.keyboard.up('Tab');
 
@@ -482,6 +506,3 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
-
-
-
