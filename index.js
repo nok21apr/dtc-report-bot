@@ -42,8 +42,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
         });
 
         page = await browser.newPage();
-        page.setDefaultNavigationTimeout(300000);
-        page.setDefaultTimeout(300000);
+        page.setDefaultNavigationTimeout(60000);
+        page.setDefaultTimeout(60000);
         await page.setViewport({ width: 1920, height: 1080 });
         await page.emulateTimezone('Asia/Bangkok');
         
@@ -86,7 +86,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         try {
             await page.goto('https://gps.dtc.co.th/v2/report-main/car-usage/status', { 
                 waitUntil: 'domcontentloaded', 
-                timeout: 60000 
+                timeout: 90000 
             });
             console.log('✅ Navigated to Status Report Page.');
         } catch (err) {
@@ -94,7 +94,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         }
 
         try {
-            await page.waitForSelector('div.layout-main, div.layout-menu-container', { timeout: 20000 });
+            await page.waitForSelector('div.layout-main, div.layout-menu-container', { timeout: 90000 });
         } catch(e) { console.log('⚠️ Page structure wait warning.'); }
 
         // ---------------------------------------------------------
@@ -495,3 +495,4 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
