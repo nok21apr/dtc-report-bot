@@ -489,7 +489,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         // ---------------------------------------------------------
         // Step 5: Email
         // ---------------------------------------------------------
-        console.log('📧 Step 7: Sending Email...');
+        console.log('📧 Step 5: Sending Email...');
         const transporter = nodemailer.createTransport({
             service: 'gmail',
             auth: { user: EMAIL_USER, pass: EMAIL_PASS }
@@ -516,3 +516,4 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
