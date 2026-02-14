@@ -154,7 +154,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
             } catch (e) {
                 console.error('⚠️ Error selecting report type:', e.message);
                 try {
-                     const opt = await page.$x("//li//span[contains(text(), 'ความเร็วเกิน')]");
+                     const opt = await page.$x("//li//span[contains(text(), 'ความเร็วเกิน(กำหนดค่าเอง)')]");
                      if(opt.length > 0) await opt[0].click();
                 } catch(err){}
             }
@@ -175,7 +175,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
             // 1. คลิก Dropdown ข้อมูลกลุ่มรถ
             await puppeteer.Locator.race([
                 targetPage.locator('div:nth-of-type(5) path'),
-                targetPage.locator('::-p-xpath(//*[@id="pv_id_40"]/div/svg/path)'),
                 targetPage.locator(':scope >>> div:nth-of-type(5) path')
             ])
                 .setTimeout(timeout)
@@ -191,9 +190,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
             // 2. คลิกเลือก "กลุ่มทั้งหมด"
             await puppeteer.Locator.race([
                 targetPage.locator('::-p-aria(กลุ่มทั้งหมด[role="option"]) >>>> ::-p-aria([role="generic"])'),
-                targetPage.locator('#pv_id_40_0 > span.p-dropdown-item-label'),
-                targetPage.locator('::-p-xpath(//*[@id="pv_id_40_0"]/span[1])'),
-                targetPage.locator(':scope >>> #pv_id_40_0 > span.p-dropdown-item-label')
             ])
                 .setTimeout(timeout)
                 .click({
@@ -404,24 +400,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
             const timeout = 5000;
             const targetPage = page;
 
-            console.log('   Clicking Search Button (1/2)...');
-            await puppeteer.Locator.race([
-                targetPage.locator('div.flex > div.h-full > div > div > div.flex > button:nth-of-type(2) > div > span'),
-                targetPage.locator('::-p-xpath(//*[@id="app"]/div/main/div[2]/div/div[2]/div[2]/div/div/div[4]/button[2]/div/span)'),
-                targetPage.locator(':scope >>> div.flex > div.h-full > div > div > div.flex > button:nth-of-type(2) > div > span')
-            ])
-                .setTimeout(timeout)
-                .click({
-                  offset: {
-                    x: 5.3089599609375,
-                    y: 7.21527099609375,
-                  },
-                });
-
-            // รอ 1 วินาทีก่อนกดครั้งที่ 2
-            await new Promise(r => setTimeout(r, 1000));
-
-            console.log('   Clicking Search Button (2/2)...');
+            console.log('   Clicking Search Button...');
             await puppeteer.Locator.race([
                 targetPage.locator('div.flex > div.h-full > div > div > div.flex > button:nth-of-type(2) > div > span'),
                 targetPage.locator('::-p-xpath(//*[@id="app"]/div/main/div[2]/div/div[2]/div[2]/div/div/div[4]/button[2]/div/span)'),
@@ -516,4 +495,3 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
-
