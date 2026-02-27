@@ -134,9 +134,9 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await page.waitForSelector('#btnexport', { visible: true, timeout: 120000 });
         
         // 💡 แก้ไข 2: ใช้ Network Idle แทนการรอ 5 นาทีแบบตายตัว
-        // รอจนกว่าการดึงข้อมูล (Network Requests) จะนิ่งสนิทเป็นเวลา 2 วินาที (ให้เวลาสูงสุด 2 นาที)
+        // รอจนกว่าการดึงข้อมูล (Network Requests) จะนิ่งสนิทเป็นเวลา 2 วินาที (ให้เวลาสูงสุด 5 นาที)
         try {
-            await page.waitForNetworkIdle({ idleTime: 2000, timeout: 120000 });
+            await page.waitForNetworkIdle({ idleTime: 2000, timeout: 300000 });
         } catch (e) {
             console.log('⚠️ Network Idle timeout, assuming data is loaded and proceeding...');
         }
@@ -215,3 +215,4 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1); // ส่งสัญญาณให้ GitHub Actions รู้ว่ารันล้มเหลว
     }
 })();
+
