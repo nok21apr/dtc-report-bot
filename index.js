@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Optimized & Fast-Fail Mode)...');
+    console.log('🚀 Starting Bot (Smart Wait Max 5 Mins Mode)...');
 
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
         console.error('❌ Error: Secrets incomplete.');
@@ -41,8 +41,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         page = await browser.newPage();
         
-        // 💡 แก้ไข 1: ลด Global Timeout ลงเหลือ 60 วินาที 
-        // ถ้าเว็บมีปัญหา หรือหา Element ไม่เจอ จะได้ Error ตัดจบใน 1 นาที ไม่ต้องรอ 5 นาที
+        // Timeout พื้นฐานตั้งไว้ที่ 1 นาที (เผื่อเว็บล่มตั้งแต่ตอน Login จะได้ตัดจบไวๆ)
         page.setDefaultNavigationTimeout(60000);
         page.setDefaultTimeout(60000);
 
@@ -63,7 +62,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
         console.log('   Clicking Login...');
         await Promise.all([
             page.evaluate(() => document.getElementById('btnLogin').click()),
-            // รอจนกว่าช่องกรอกชื่อจะหายไป เป็นสัญญาณว่า Login ผ่าน
             page.waitForFunction(() => !document.querySelector('#txtname'))
         ]);
         console.log('✅ Login Success');
@@ -82,8 +80,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await page.waitForSelector('#speed_max', { visible: true });
         await page.waitForSelector('#ddl_truck', { visible: true }); 
         
-        // รอสักนิดเพื่อให้ Dropdown โหลดข้อมูลจาก Server มาให้ครบ
-        await new Promise(r => setTimeout(r, 2000));
+        await new Promise(r => setTimeout(r, 2000)); // รอโหลด Dropdown รถ
 
         await page.evaluate(() => {
             document.getElementById('speed_max').value = '55';
@@ -126,24 +123,24 @@ const EMAIL_TO = process.env.EMAIL_TO;
         });
 
         // ---------------------------------------------------------
-        // Step 5: Smart Wait (แทนที่ Hard Wait 5 นาที)
+        // Step 5: Wait for Data (Max 5 mins)
         // ---------------------------------------------------------
-        console.log('⏳ Step 5: Waiting for Data Loading...');
+        console.log('⏳ Step 5: Waiting for Data to Process (Up to 5 minutes)...');
         
-        // รอให้ปุ่ม Export ปรากฏขึ้นมา (ให้เวลาหาปุ่มสูงสุด 2 นาที)
-        await page.waitForSelector('#btnexport', { visible: true, timeout: 120000 });
-        
-        // 💡 แก้ไข 2: ใช้ Network Idle แทนการรอ 5 นาทีแบบตายตัว
-        // รอจนกว่าการดึงข้อมูล (Network Requests) จะนิ่งสนิทเป็นเวลา 2 วินาที (ให้เวลาสูงสุด 5 นาที)
+        // 💡 ให้เวลารอสูงสุด 5 นาที (300000 ms) โดยให้รอจนกว่า "Network จะหยุดโหลดเป็นเวลา 3 วินาที"
+        // แปลว่าถ้าระบบดึงข้อมูลเสร็จในนาทีที่ 2 บอทก็จะจับได้และไปต่อทันที
         try {
-            await page.waitForNetworkIdle({ idleTime: 2000, timeout: 300000 });
+            await page.waitForNetworkIdle({ idleTime: 3000, timeout: 300000 });
         } catch (e) {
-            console.log('⚠️ Network Idle timeout, assuming data is loaded and proceeding...');
+            console.log('⚠️ Network Wait Timeout (5 mins reached), assuming data is loaded...');
         }
         
-        // รอเผื่อการ Render หน้าจออีกเล็กน้อย (3 วินาที)
-        await new Promise(r => setTimeout(r, 3000));
-        console.log('✅ Data Loaded.');
+        // รอให้ปุ่ม Export มั่นใจว่าโผล่มาแน่นอน
+        await page.waitForSelector('#btnexport', { visible: true, timeout: 60000 });
+        
+        // รอแถมให้อีก 5 วินาที เพื่อให้ Browser นำข้อมูลที่โหลดเสร็จมาแสดงบนหน้าจอ (Render) จนครบ
+        await new Promise(r => setTimeout(r, 5000));
+        console.log('✅ Data Processed and Ready.');
 
         // ---------------------------------------------------------
         // Step 6: Export & Download
@@ -153,10 +150,10 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await client.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: downloadPath });
         await page.evaluate(() => document.getElementById('btnexport').click());
         
-        console.log('   Waiting for file...');
+        console.log('   Waiting for file to finish downloading...');
         let finalFile = null;
 
-        // 💡 แก้ไข 3: ลดจำนวนรอบการรอไฟล์ลง หากมีปัญหาจะได้ตัดจบใน 2 นาที (120 รอบ)
+        // รอไฟล์ดาวน์โหลดสูงสุด 2 นาที (120 วิ) ถ้านานกว่านี้ถือว่าปุ่ม Export พัง
         for (let i = 0; i < 120; i++) {
             await new Promise(r => setTimeout(r, 1000));
             const files = fs.readdirSync(downloadPath);
@@ -165,7 +162,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
                 finalFile = target;
                 break;
             }
-            if (i > 0 && i % 20 === 0) console.log(`   ...still waiting (${i}s)`);
+            if (i > 0 && i % 20 === 0) console.log(`   ...still downloading (${i}s)`);
         }
 
         if (!finalFile) {
@@ -197,7 +194,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
             from: `"DTC Bot" <${EMAIL_USER}>`,
             to: EMAIL_TO,
             subject: `รายงาน DTC Report - ${new Date().toLocaleDateString()}`,
-            text: `ถึง ผู้เกี่ยวข้อง\nไฟล์: ${finalFile}\nด้วยความนับถือ\n DTC BOT REPORT`,
+            text: `ถึง ผู้เกี่ยวข้อง\n\nระบบได้ดึงรายงานสำเร็จแล้ว\nไฟล์: ${finalFile}\n\nด้วยความนับถือ\n DTC BOT REPORT`,
             attachments: [{ filename: finalFile, path: path.join(downloadPath, finalFile) }]
         });
 
@@ -208,11 +205,10 @@ const EMAIL_TO = process.env.EMAIL_TO;
         if (page && !page.isClosed()) {
             try { 
                 await page.screenshot({ path: path.join(downloadPath, 'fatal_error.png') }); 
-                console.log('📸 Screenshot saved as fatal_error.png');
+                console.log('📸 Screenshot saved to check where it failed.');
             } catch(e){}
         }
         if (browser) await browser.close();
-        process.exit(1); // ส่งสัญญาณให้ GitHub Actions รู้ว่ารันล้มเหลว
+        process.exit(1);
     }
 })();
-
