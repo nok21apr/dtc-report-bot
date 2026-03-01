@@ -8,7 +8,7 @@ on:
 jobs:
   scrape-and-email:
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 15
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
