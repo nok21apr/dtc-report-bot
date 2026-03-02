@@ -193,8 +193,8 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await transporter.sendMail({
             from: `"DTC Bot" <${EMAIL_USER}>`,
             to: EMAIL_TO,
-            subject: `รายงาน DTC Report - ${new Date().toLocaleDateString()}`,
-            text: `ถึง ผู้เกี่ยวข้อง\n\nระบบได้ดึงรายงานสำเร็จแล้ว\nไฟล์: ${finalFile}\n\nด้วยความนับถือ\n DTC BOT REPORT`,
+            subject: `รายงาน DTC Report - ${new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })}`,
+            text: `ถึง ผู้เกี่ยวข้อง\n\nรายงานความเร็วเกิน ตรวจสอบทะเบียนที่พบปัญหาและติดตามDTC\nไฟล์: ${finalFile}\n\nด้วยความนับถือ\nDTC BOT REPORT`,
             attachments: [{ filename: finalFile, path: path.join(downloadPath, finalFile) }]
         });
 
@@ -212,3 +212,4 @@ const EMAIL_TO = process.env.EMAIL_TO;
         process.exit(1);
     }
 })();
+
