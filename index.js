@@ -11,7 +11,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Smart Wait Max 5 Mins Mode)...');
+    console.log('🚀 Starting Bot (Auto-Retry on Empty File Mode)...');
 
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
         console.error('❌ Error: Secrets incomplete.');
@@ -24,6 +24,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
     let browser = null;
     let page = null;
+    let finalFile = null; // ย้ายตัวแปรมารอนอก Loop
 
     try {
         console.log('🖥️ Launching Browser...');
@@ -41,7 +42,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
         page = await browser.newPage();
         
-        // Timeout พื้นฐานตั้งไว้ที่ 1 นาที (เผื่อเว็บล่มตั้งแต่ตอน Login จะได้ตัดจบไวๆ)
+        // Timeout 1 นาที
         page.setDefaultNavigationTimeout(60000);
         page.setDefaultTimeout(60000);
 
@@ -59,7 +60,6 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await page.type('#txtname', DTC_USER);
         await page.type('#txtpass', DTC_PASS);
         
-        console.log('   Clicking Login...');
         await Promise.all([
             page.evaluate(() => document.getElementById('btnLogin').click()),
             page.waitForFunction(() => !document.querySelector('#txtname'))
@@ -79,8 +79,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
         
         await page.waitForSelector('#speed_max', { visible: true });
         await page.waitForSelector('#ddl_truck', { visible: true }); 
-        
-        await new Promise(r => setTimeout(r, 2000)); // รอโหลด Dropdown รถ
+        await new Promise(r => setTimeout(r, 2000));
 
         await page.evaluate(() => {
             document.getElementById('speed_max').value = '55';
@@ -113,72 +112,92 @@ const EMAIL_TO = process.env.EMAIL_TO;
             selectElement.dispatchEvent(event);
         });
 
-        // ---------------------------------------------------------
-        // Step 4: Search
-        // ---------------------------------------------------------
-        console.log('4️⃣ Step 4: Search...');
-        await page.evaluate(() => {
-            if(typeof sertch_data === 'function') sertch_data();
-            else document.querySelector("span[onclick='sertch_data();']").click();
-        });
+        // =========================================================
+        // 🔄 RETRY LOOP: Step 4, 5, 6 (Search -> Wait -> Check)
+        // =========================================================
+        const MAX_RETRIES = 3; // จำนวนครั้งที่จะลองใหม่
+        let isFileValid = false;
 
-        // ---------------------------------------------------------
-        // Step 5: Wait for Data (Max 5 mins)
-        // ---------------------------------------------------------
-        console.log('⏳ Step 5: Waiting for Data to Process (Up to 5 minutes)...');
-        
-        // 💡 ให้เวลารอสูงสุด 5 นาที (300000 ms) โดยให้รอจนกว่า "Network จะหยุดโหลดเป็นเวลา 3 วินาที"
-        // แปลว่าถ้าระบบดึงข้อมูลเสร็จในนาทีที่ 2 บอทก็จะจับได้และไปต่อทันที
-        try {
-            await page.waitForNetworkIdle({ idleTime: 3000, timeout: 300000 });
-        } catch (e) {
-            console.log('⚠️ Network Wait Timeout (5 mins reached), assuming data is loaded...');
-        }
-        
-        // รอให้ปุ่ม Export มั่นใจว่าโผล่มาแน่นอน
-        await page.waitForSelector('#btnexport', { visible: true, timeout: 60000 });
-        
-        // รอแถมให้อีก 5 วินาที เพื่อให้ Browser นำข้อมูลที่โหลดเสร็จมาแสดงบนหน้าจอ (Render) จนครบ
-        await new Promise(r => setTimeout(r, 5000));
-        console.log('✅ Data Processed and Ready.');
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            console.log(`\n🔄 Attempt ${attempt}/${MAX_RETRIES}: Searching and Exporting...`);
 
-        // ---------------------------------------------------------
-        // Step 6: Export & Download
-        // ---------------------------------------------------------
-        console.log('6️⃣ Step 6: Exporting...');
-        
-        await client.send('Page.setDownloadBehavior', { behavior: 'allow', downloadPath: downloadPath });
-        await page.evaluate(() => document.getElementById('btnexport').click());
-        
-        console.log('   Waiting for file to finish downloading...');
-        let finalFile = null;
+            // ---------------------------------------------------------
+            // Step 4: Search
+            // ---------------------------------------------------------
+            console.log('4️⃣ Step 4: Clicking Search...');
+            await page.evaluate(() => {
+                if(typeof sertch_data === 'function') sertch_data();
+                else document.querySelector("span[onclick='sertch_data();']").click();
+            });
 
-        // รอไฟล์ดาวน์โหลดสูงสุด 2 นาที (120 วิ) ถ้านานกว่านี้ถือว่าปุ่ม Export พัง
-        for (let i = 0; i < 120; i++) {
-            await new Promise(r => setTimeout(r, 1000));
-            const files = fs.readdirSync(downloadPath);
-            const target = files.find(f => (f.endsWith('.xlsx') || f.endsWith('.xls')) && !f.endsWith('.crdownload'));
-            if (target) {
-                finalFile = target;
-                break;
+            // ---------------------------------------------------------
+            // Step 5: Wait for Data (Smart Wait)
+            // ---------------------------------------------------------
+            console.log('⏳ Step 5: Waiting for Data...');
+            try {
+                // รอให้ Network นิ่ง 3 วิ (แปลว่าโหลดเสร็จ) แต่ไม่เกิน 5 นาที
+                await page.waitForNetworkIdle({ idleTime: 3000, timeout: 300000 });
+            } catch (e) {
+                console.log('⚠️ Network Wait Timeout, proceeding anyway...');
             }
-            if (i > 0 && i % 20 === 0) console.log(`   ...still downloading (${i}s)`);
-        }
+            await page.waitForSelector('#btnexport', { visible: true, timeout: 60000 });
+            await new Promise(r => setTimeout(r, 3000)); // รอ Render หน้าจอ
 
-        if (!finalFile) {
-            console.warn('⚠️ Retry clicking Export...');
+            // ---------------------------------------------------------
+            // Step 6: Export & Check File Size
+            // ---------------------------------------------------------
+            console.log('6️⃣ Step 6: Exporting...');
+            
+            // เคลียร์ไฟล์เก่าในโฟลเดอร์ก่อนโหลดใหม่ (ถ้ามี)
+            if (fs.existsSync(downloadPath)) {
+                fs.readdirSync(downloadPath).forEach(f => fs.unlinkSync(path.join(downloadPath, f)));
+            }
+
             await page.evaluate(() => document.getElementById('btnexport').click());
-            for (let i = 0; i < 60; i++) {
+            
+            console.log('   Waiting for file...');
+            let downloadedFile = null;
+
+            // รอไฟล์ 2 นาที
+            for (let i = 0; i < 120; i++) {
                 await new Promise(r => setTimeout(r, 1000));
                 const files = fs.readdirSync(downloadPath);
                 const target = files.find(f => (f.endsWith('.xlsx') || f.endsWith('.xls')) && !f.endsWith('.crdownload'));
-                if (target) { finalFile = target; break; }
+                if (target) {
+                    downloadedFile = target;
+                    break;
+                }
+            }
+
+            if (!downloadedFile) {
+                console.warn('⚠️ No file downloaded in this attempt.');
+                continue; // ไปรอบถัดไป
+            }
+
+            // 🔍 ตรวจสอบขนาดไฟล์
+            const filePath = path.join(downloadPath, downloadedFile);
+            const stats = fs.statSync(filePath);
+            const fileSizeInBytes = stats.size;
+            const fileSizeInKB = fileSizeInBytes / 1024;
+
+            console.log(`📄 File found: ${downloadedFile} | Size: ${fileSizeInKB.toFixed(2)} KB`);
+
+            if (fileSizeInKB < 10) { // <--- เงื่อนไข: ถ้าน้อยกว่า 10KB
+                console.warn(`❌ File is too small (<10KB). Likely empty content. Retrying...`);
+                // ไฟล์จะถูกลบอัตโนมัติในรอบถัดไปตรงบรรทัด "เคลียร์ไฟล์เก่า"
+            } else {
+                console.log(`✅ File size is OK (>10KB). Proceeding.`);
+                finalFile = downloadedFile;
+                isFileValid = true;
+                break; // <--- สำเร็จ! ออกจาก Loop
             }
         }
+        // =========================================================
 
-        if (!finalFile) throw new Error('❌ Download Timeout: File never arrived.');
+        if (!isFileValid || !finalFile) {
+            throw new Error(`❌ Failed to get valid file after ${MAX_RETRIES} attempts.`);
+        }
 
-        console.log(`✅ File Downloaded: ${finalFile}`);
         await browser.close();
 
         // ---------------------------------------------------------
@@ -193,8 +212,9 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await transporter.sendMail({
             from: `"DTC Bot" <${EMAIL_USER}>`,
             to: EMAIL_TO,
+            // แก้ไขวันที่เป็น YYYY-MM-DD (2026-03-02) ตามที่ขอ
             subject: `รายงาน DTC Report - ${new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })}`,
-            text: `ถึง ผู้เกี่ยวข้อง\n\nรายงานความเร็วเกิน ตรวจสอบทะเบียนที่พบปัญหาและติดตามDTC\nไฟล์: ${finalFile}\n\nด้วยความนับถือ\nDTC BOT REPORT`,
+            text: `ถึง ผู้เกี่ยวข้อง\n\nรายงานความเร็วเกิน โปรดติดตามทะเบียนที่เกิดปัญหา\nไฟล์: ${finalFile}\n\nด้วยความนับถือ\nDTC BOT REPORT`,
             attachments: [{ filename: finalFile, path: path.join(downloadPath, finalFile) }]
         });
 
@@ -205,11 +225,9 @@ const EMAIL_TO = process.env.EMAIL_TO;
         if (page && !page.isClosed()) {
             try { 
                 await page.screenshot({ path: path.join(downloadPath, 'fatal_error.png') }); 
-                console.log('📸 Screenshot saved to check where it failed.');
             } catch(e){}
         }
         if (browser) await browser.close();
         process.exit(1);
     }
 })();
-
