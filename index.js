@@ -73,44 +73,51 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'domcontentloaded' });
         
         // ---------------------------------------------------------
-        // Step 3: Fill Form
-        // ---------------------------------------------------------
-        console.log('3️⃣ Step 3: Fill Form...');
-        
-        await page.waitForSelector('#speed_max', { visible: true });
-        await page.waitForSelector('#ddl_truck', { visible: true }); 
-        await new Promise(r => setTimeout(r, 2000));
+// Step 3: Fill Form
+// ---------------------------------------------------------
+console.log('3️⃣ Step 3: Fill Form...');
 
-        await page.evaluate(() => {
-            document.getElementById('speed_max').value = '55';
-            
-            var d = new Date(); d.setDate(1); d.setDate(d.getDate() - 2); 
-            var y = d.getFullYear(); var m = d.getMonth() + 1; var day = d.getDate(); 
-            var start = y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day + ' 00:00';
+await page.waitForSelector('#speed_max', { visible: true });
+await page.waitForSelector('#ddl_truck', { visible: true }); 
+await new Promise(r => setTimeout(r, 2000));
 
-            var d2 = new Date(); var y2 = d2.getFullYear(); var m2 = d2.getMonth() + 1; 
-            var last = new Date(y2, m2, 0).getDate(); 
-            var end = y2 + '-' + (m2 < 10 ? '0' : '') + m2 + '-' + (last < 10 ? '0' : '') + last + ' 23:59';
+await page.evaluate(() => {
+    document.getElementById('speed_max').value = '55';
+    
+    // คำนวณวันเริ่มต้น (คงเดิม)
+    var d = new Date(); d.setDate(1); d.setDate(d.getDate() - 2); 
+    var y = d.getFullYear(); var m = d.getMonth() + 1; var day = d.getDate(); 
+    var start = y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day + ' 00:00';
 
-            document.getElementById('date9').value = start;
-            document.getElementById('date10').value = end;
-            
-            document.getElementById('date9').dispatchEvent(new Event('change'));
-            document.getElementById('date10').dispatchEvent(new Event('change'));
+    // คำนวณวันสิ้นสุด (ปรับใหม่: เป็นวันที่ 2 ของเดือนถัดไป)
+    var d2 = new Date(); 
+    d2.setDate(1); // ป้องกันบั๊กกรณีรันสคริปต์ช่วงสิ้นเดือนที่มี 31 วัน
+    d2.setMonth(d2.getMonth() + 1); // บวกไป 1 เดือน
+    
+    var y2 = d2.getFullYear(); 
+    var m2 = d2.getMonth() + 1; 
+    // กำหนดวันที่เป็น '02' เสมอ ตามความต้องการ
+    var end = y2 + '-' + (m2 < 10 ? '0' : '') + m2 + '-02 23:59';
 
-            document.getElementById('ddlMinute').value = '1';
-            
-            var selectElement = document.getElementById('ddl_truck'); 
-            var options = selectElement.options; 
-            for (var i = 0; i < options.length; i++) { 
-                if (options[i].text.includes('ทั้งหมด')) { 
-                    selectElement.value = options[i].value; 
-                    break; 
-                } 
-            } 
-            var event = new Event('change', { bubbles: true }); 
-            selectElement.dispatchEvent(event);
-        });
+    document.getElementById('date9').value = start;
+    document.getElementById('date10').value = end;
+    
+    document.getElementById('date9').dispatchEvent(new Event('change'));
+    document.getElementById('date10').dispatchEvent(new Event('change'));
+
+    document.getElementById('ddlMinute').value = '1';
+    
+    var selectElement = document.getElementById('ddl_truck'); 
+    var options = selectElement.options; 
+    for (var i = 0; i < options.length; i++) { 
+        if (options[i].text.includes('ทั้งหมด')) { 
+            selectElement.value = options[i].value; 
+            break; 
+        } 
+    } 
+    var event = new Event('change', { bubbles: true }); 
+    selectElement.dispatchEvent(event);
+});
 
         // =========================================================
         // 🔄 RETRY LOOP: Step 4, 5, 6 (Search -> Wait -> Check)
