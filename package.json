@@ -3,7 +3,9 @@
   "version": "1.0.0",
   "dependencies": {
     "puppeteer": "latest",
-    "nodemailer": "^6.9.7"
+    "nodemailer": "^6.9.7",
+    "xlsx": "^0.18.5",
+    "adm-zip": "^0.5.10"
   }
 }
 
