@@ -2,6 +2,8 @@ const puppeteer = require('puppeteer');
 const fs = require('fs');
 const path = require('path');
 const nodemailer = require('nodemailer');
+const XLSX = require('xlsx'); // เพิ่ม library แปลงไฟล์
+const AdmZip = require('adm-zip'); // เพิ่ม library zip ไฟล์
 
 // รับค่าจาก GitHub Secrets
 const DTC_USER = process.env.DTC_USER;
@@ -11,7 +13,7 @@ const EMAIL_PASS = process.env.EMAIL_PASS;
 const EMAIL_TO = process.env.EMAIL_TO;
 
 (async () => {
-    console.log('🚀 Starting Bot (Auto-Retry on Empty File Mode)...');
+    console.log('🚀 Starting Bot (Excel to CSV UTF-8 + Zip Mode)...');
 
     if (!DTC_USER || !DTC_PASS || !EMAIL_USER || !EMAIL_PASS) {
         console.error('❌ Error: Secrets incomplete.');
@@ -24,7 +26,7 @@ const EMAIL_TO = process.env.EMAIL_TO;
 
     let browser = null;
     let page = null;
-    let finalFile = null; // ย้ายตัวแปรมารอนอก Loop
+    let finalFile = null; // เก็บชื่อไฟล์ Excel
 
     try {
         console.log('🖥️ Launching Browser...');
@@ -73,51 +75,51 @@ const EMAIL_TO = process.env.EMAIL_TO;
         await page.goto('https://gps.dtc.co.th/ultimate/Report/Report_03.php', { waitUntil: 'domcontentloaded' });
         
         // ---------------------------------------------------------
-// Step 3: Fill Form
-// ---------------------------------------------------------
-console.log('3️⃣ Step 3: Fill Form...');
+        // Step 3: Fill Form
+        // ---------------------------------------------------------
+        console.log('3️⃣ Step 3: Fill Form...');
 
-await page.waitForSelector('#speed_max', { visible: true });
-await page.waitForSelector('#ddl_truck', { visible: true }); 
-await new Promise(r => setTimeout(r, 2000));
+        await page.waitForSelector('#speed_max', { visible: true });
+        await page.waitForSelector('#ddl_truck', { visible: true }); 
+        await new Promise(r => setTimeout(r, 2000));
 
-await page.evaluate(() => {
-    document.getElementById('speed_max').value = '55';
-    
-    // คำนวณวันเริ่มต้น (คงเดิม)
-    var d = new Date(); d.setDate(1); d.setDate(d.getDate() - 2); 
-    var y = d.getFullYear(); var m = d.getMonth() + 1; var day = d.getDate(); 
-    var start = y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day + ' 00:00';
+        await page.evaluate(() => {
+            document.getElementById('speed_max').value = '55';
+            
+            // คำนวณวันเริ่มต้น (คงเดิม)
+            var d = new Date(); d.setDate(1); d.setDate(d.getDate() - 2); 
+            var y = d.getFullYear(); var m = d.getMonth() + 1; var day = d.getDate(); 
+            var start = y + '-' + (m < 10 ? '0' : '') + m + '-' + (day < 10 ? '0' : '') + day + ' 00:00';
 
-    // คำนวณวันสิ้นสุด (ปรับใหม่: เป็นวันที่ 2 ของเดือนถัดไป)
-    var d2 = new Date(); 
-    d2.setDate(1); // ป้องกันบั๊กกรณีรันสคริปต์ช่วงสิ้นเดือนที่มี 31 วัน
-    d2.setMonth(d2.getMonth() + 1); // บวกไป 1 เดือน
-    
-    var y2 = d2.getFullYear(); 
-    var m2 = d2.getMonth() + 1; 
-    // กำหนดวันที่เป็น '02' เสมอ ตามความต้องการ
-    var end = y2 + '-' + (m2 < 10 ? '0' : '') + m2 + '-02 23:59';
+            // คำนวณวันสิ้นสุด (ปรับใหม่: เป็นวันที่ 2 ของเดือนถัดไป)
+            var d2 = new Date(); 
+            d2.setDate(1); // ป้องกันบั๊กกรณีรันสคริปต์ช่วงสิ้นเดือนที่มี 31 วัน
+            d2.setMonth(d2.getMonth() + 1); // บวกไป 1 เดือน
+            
+            var y2 = d2.getFullYear(); 
+            var m2 = d2.getMonth() + 1; 
+            // กำหนดวันที่เป็น '02' เสมอ ตามความต้องการ
+            var end = y2 + '-' + (m2 < 10 ? '0' : '') + m2 + '-02 23:59';
 
-    document.getElementById('date9').value = start;
-    document.getElementById('date10').value = end;
-    
-    document.getElementById('date9').dispatchEvent(new Event('change'));
-    document.getElementById('date10').dispatchEvent(new Event('change'));
+            document.getElementById('date9').value = start;
+            document.getElementById('date10').value = end;
+            
+            document.getElementById('date9').dispatchEvent(new Event('change'));
+            document.getElementById('date10').dispatchEvent(new Event('change'));
 
-    document.getElementById('ddlMinute').value = '1';
-    
-    var selectElement = document.getElementById('ddl_truck'); 
-    var options = selectElement.options; 
-    for (var i = 0; i < options.length; i++) { 
-        if (options[i].text.includes('ทั้งหมด')) { 
-            selectElement.value = options[i].value; 
-            break; 
-        } 
-    } 
-    var event = new Event('change', { bubbles: true }); 
-    selectElement.dispatchEvent(event);
-});
+            document.getElementById('ddlMinute').value = '1';
+            
+            var selectElement = document.getElementById('ddl_truck'); 
+            var options = selectElement.options; 
+            for (var i = 0; i < options.length; i++) { 
+                if (options[i].text.includes('ทั้งหมด')) { 
+                    selectElement.value = options[i].value; 
+                    break; 
+                } 
+            } 
+            var event = new Event('change', { bubbles: true }); 
+            selectElement.dispatchEvent(event);
+        });
 
         // =========================================================
         // 🔄 RETRY LOOP: Step 4, 5, 6 (Search -> Wait -> Check)
@@ -128,18 +130,12 @@ await page.evaluate(() => {
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             console.log(`\n🔄 Attempt ${attempt}/${MAX_RETRIES}: Searching and Exporting...`);
 
-            // ---------------------------------------------------------
-            // Step 4: Search
-            // ---------------------------------------------------------
             console.log('4️⃣ Step 4: Clicking Search...');
             await page.evaluate(() => {
                 if(typeof sertch_data === 'function') sertch_data();
                 else document.querySelector("span[onclick='sertch_data();']").click();
             });
 
-            // ---------------------------------------------------------
-            // Step 5: Wait for Data (Smart Wait)
-            // ---------------------------------------------------------
             console.log('⏳ Step 5: Waiting for Data...');
             try {
                 // รอให้ Network นิ่ง 3 วิ (แปลว่าโหลดเสร็จ) แต่ไม่เกิน 5 นาที
@@ -150,9 +146,6 @@ await page.evaluate(() => {
             await page.waitForSelector('#btnexport', { visible: true, timeout: 60000 });
             await new Promise(r => setTimeout(r, 3000)); // รอ Render หน้าจอ
 
-            // ---------------------------------------------------------
-            // Step 6: Export & Check File Size
-            // ---------------------------------------------------------
             console.log('6️⃣ Step 6: Exporting...');
             
             // เคลียร์ไฟล์เก่าในโฟลเดอร์ก่อนโหลดใหม่ (ถ้ามี)
@@ -189,23 +182,52 @@ await page.evaluate(() => {
 
             console.log(`📄 File found: ${downloadedFile} | Size: ${fileSizeInKB.toFixed(2)} KB`);
 
-            if (fileSizeInKB < 10) { // <--- เงื่อนไข: ถ้าน้อยกว่า 10KB
+            if (fileSizeInKB < 10) { 
                 console.warn(`❌ File is too small (<10KB). Likely empty content. Retrying...`);
-                // ไฟล์จะถูกลบอัตโนมัติในรอบถัดไปตรงบรรทัด "เคลียร์ไฟล์เก่า"
             } else {
                 console.log(`✅ File size is OK (>10KB). Proceeding.`);
                 finalFile = downloadedFile;
                 isFileValid = true;
-                break; // <--- สำเร็จ! ออกจาก Loop
+                break; // สำเร็จ! ออกจาก Loop
             }
         }
-        // =========================================================
 
         if (!isFileValid || !finalFile) {
             throw new Error(`❌ Failed to get valid file after ${MAX_RETRIES} attempts.`);
         }
 
         await browser.close();
+
+        // ---------------------------------------------------------
+        // 🔄 NEW PROCESS: Convert Excel to CSV UTF-8
+        // ---------------------------------------------------------
+        console.log('🔄 Converting Excel to CSV (UTF-8)...');
+        const excelFullArg = path.join(downloadPath, finalFile);
+        const csvFileName = finalFile.replace(/\.[^/.]+$/, "") + ".csv";
+        const csvPath = path.join(downloadPath, csvFileName);
+
+        const workbook = XLSX.readFile(excelFullArg);
+        const firstSheetName = workbook.SheetNames[0];
+        const worksheet = workbook.Sheets[firstSheetName];
+        
+        // แปลงเป็น CSV
+        const csvContent = XLSX.utils.sheet_to_csv(worksheet);
+        
+        // บันทึกเป็น UTF-8 แบบมี BOM (ให้ภาษาไทยอ่านออกใน Excel)
+        fs.writeFileSync(csvPath, '\ufeff' + csvContent, 'utf8');
+        console.log('✅ CSV Created.');
+
+        // ---------------------------------------------------------
+        // 📦 NEW PROCESS: Zip the CSV file
+        // ---------------------------------------------------------
+        console.log('📦 Zipping CSV file...');
+        const zipFileName = csvFileName.replace(".csv", ".zip");
+        const zipPath = path.join(downloadPath, zipFileName);
+        
+        const zip = new AdmZip();
+        zip.addLocalFile(csvPath);
+        zip.writeZip(zipPath);
+        console.log(`✅ Zip Created: ${zipFileName}`);
 
         // ---------------------------------------------------------
         // Step 7: Email
@@ -221,8 +243,8 @@ await page.evaluate(() => {
             to: EMAIL_TO,
             // แก้ไขวันที่เป็น YYYY-MM-DD (2026-03-02) ตามที่ขอ
             subject: `รายงาน DTC Report - ${new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Bangkok' })}`,
-            text: `ถึง ผู้เกี่ยวข้อง\n\nรายงานความเร็วเกิน โปรดติดตามทะเบียนที่เกิดปัญหา\nไฟล์: ${finalFile}\n\nด้วยความนับถือ\nDTC BOT REPORT`,
-            attachments: [{ filename: finalFile, path: path.join(downloadPath, finalFile) }]
+            text: `ถึง ผู้เกี่ยวข้อง\n\nรายงานความเร็วเกิน โปรดติดตามทะเบียนที่เกิดปัญหา\nไฟล์: ${zipFileName}\n\nด้วยความนับถือ\nDTC BOT REPORT`,
+            attachments: [{ filename: zipFileName, path: zipPath }] // ส่งไฟล์ .zip
         });
 
         console.log('🎉 Mission Complete!');
